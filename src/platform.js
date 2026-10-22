@@ -68,7 +68,8 @@ class TeletaskPlatform {
     }
 
     // teletask-api is ESM; load it here (async context) from this CommonJS module.
-    const { TeletaskClient } = await import("teletask-api");
+    // The library is vendored into ./lib at build time (see scripts/bundle-lib.mjs).
+    const { TeletaskClient } = await import("../lib/teletask-api/index.js");
 
     // Register the devices with the client so state reports carry deviceId.
     this.client = new TeletaskClient({

@@ -8,6 +8,18 @@
     "node": ">=18",
     "homebridge": "^1.6.0 || ^2.0.0"
   },
+  "scripts": {
+    "bundle": "node scripts/bundle-lib.mjs",
+    "prepare": "node scripts/bundle-lib.mjs"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "lib",
+    "scripts",
+    "config.schema.json",
+    "README.md"
+  ],
   "keywords": [
     "homebridge-plugin",
     "teletask",
@@ -16,8 +28,5 @@
     "homekit"
   ],
   "author": "Peter Russell",
-  "license": "MIT",
-  "dependencies": {
-    "teletask-api": "file:.."
-  }
+  "license": "MIT"
 }
