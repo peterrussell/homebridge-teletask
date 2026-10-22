@@ -55,7 +55,9 @@ class TeletaskPlatform {
           invertPosition: Boolean(a.invertPosition),
           climate: a.climate ? String(a.climate).toLowerCase() : "auto",
           temperatureFrom: a.temperatureFrom != null ? Number(a.temperatureFrom) : null,
-          powerRelay: a.powerRelay != null ? Number(a.powerRelay) : null
+          powerRelay: a.powerRelay != null ? Number(a.powerRelay) : null,
+          minBrightness: a.minBrightness != null ? Number(a.minBrightness) : null,
+          maxBrightness: a.maxBrightness != null ? Number(a.maxBrightness) : null
         };
       });
   }
@@ -193,7 +195,14 @@ class TeletaskPlatform {
         const relayTarget = device.powerRelay != null
           ? { centralUnit: device.centralUnit, functionCode: 1, number: device.powerRelay }
           : null;
-        let lastLevel = 100; // remember the last non-zero level to restore on "On"
+        // Map HomeKit 1-100% onto the dimmer's usable Teletask range [minBrightness,
+        // maxBrightness] — e.g. a light that tops out at 75 and has a low-end floor.
+        const bMin = device.minBrightness ?? 0;
+        const bMax = device.maxBrightness ?? 100;
+        const toLevel = (hk) => (hk <= 0 ? 0 : Math.round(bMin + (hk / 100) * (bMax - bMin)));
+        const toHk = (lvl) =>
+          lvl <= 0 ? 0 : Math.max(1, Math.min(100, Math.round(((lvl - bMin) / Math.max(1, bMax - bMin)) * 100)));
+        let lastHk = 100; // last non-zero HomeKit brightness, to restore on "On"
         const isOn = () =>
           relayTarget ? Boolean(this.client.getCachedState(relayTarget)?.normalized?.on)
                       : Boolean(cached()?.on);
@@ -203,24 +212,25 @@ class TeletaskPlatform {
           .onSet(async (value) => {
             if (relayTarget) {
               await client.setLightPower(relayTarget, Boolean(value));
-              if (value) await client.setDimmerLevel(device.id, lastLevel || 100);
+              if (value) await client.setDimmerLevel(device.id, toLevel(lastHk || 100));
             } else {
-              await client.setDimmerLevel(device.id, value ? (lastLevel || 100) : 0);
+              await client.setDimmerLevel(device.id, value ? toLevel(lastHk || 100) : 0);
             }
           });
         service
           .getCharacteristic(C.Brightness)
-          .onGet(() => Number(cached()?.level ?? 0))
+          .onGet(() => toHk(Number(cached()?.level ?? 0)))
           .onSet(async (value) => {
-            const v = Number(value);
-            if (v > 0) lastLevel = v;
-            await client.setDimmerLevel(device.id, v);
+            const hk = Number(value);
+            if (hk > 0) lastHk = hk;
+            await client.setDimmerLevel(device.id, toLevel(hk));
           });
         update = (n) => {
           service.updateCharacteristic(C.On, isOn());
           if (typeof n?.level === "number") {
-            if (n.level > 0) lastLevel = n.level;
-            service.updateCharacteristic(C.Brightness, n.level);
+            const hk = toHk(n.level);
+            if (hk > 0) lastHk = hk;
+            service.updateCharacteristic(C.Brightness, hk);
           }
         };
         break;

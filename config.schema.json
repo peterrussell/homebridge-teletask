@@ -96,9 +96,19 @@
               "description": "For a zone with no temperature of its own (e.g. AC): sensor-zone number to read the current temperature from instead."
             },
             "powerRelay": {
-              "title": "On/off via relay (thermostats only)",
+              "title": "On/off via relay (thermostats & dimmers)",
               "type": "integer",
-              "description": "Relay output number to use for the thermostat's on/off (e.g. an underfloor-heating circuit), instead of the zone's own power toggle."
+              "description": "Relay output number to use for on/off — for a thermostat (underfloor circuit) or a dimmer that needs a relay to fully switch off."
+            },
+            "minBrightness": {
+              "title": "Dimmer: level for HomeKit 1% (lowest usable)",
+              "type": "integer",
+              "description": "Dimmers only: the Teletask level (0-100) the light reaches at HomeKit 1%. Maps the slider's low end to the light's real floor."
+            },
+            "maxBrightness": {
+              "title": "Dimmer: level for HomeKit 100% (full)",
+              "type": "integer",
+              "description": "Dimmers only: the Teletask level (0-100) that gives full brightness (e.g. 75 if the light stops getting brighter above 75%)."
             }
           }
         }
