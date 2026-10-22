@@ -54,7 +54,8 @@ class TeletaskPlatform {
           name: a.name ?? id,
           invertPosition: Boolean(a.invertPosition),
           climate: a.climate ? String(a.climate).toLowerCase() : "auto",
-          temperatureFrom: a.temperatureFrom != null ? Number(a.temperatureFrom) : null
+          temperatureFrom: a.temperatureFrom != null ? Number(a.temperatureFrom) : null,
+          powerRelay: a.powerRelay != null ? Number(a.powerRelay) : null
         };
       });
   }
@@ -254,16 +255,26 @@ class TeletaskPlatform {
         service.getCharacteristic(T).setProps({ validValues: valid });
 
         const clamp = (t) => Math.max(5, Math.min(35, t));
-        // Teletask mode byte: 94=Auto, 95=Heat, 96=Cool. Derive the real heat/cool state
-        // from the zone (so a reverse-cycle AC shows the right one), falling back to the
-        // climate hint when the mode isn't reported.
+        // Power/on-off: by default via the zone's SET_TEMPONOFF toggle; if "powerRelay" is
+        // set, use that relay output instead (reliable on/off for underfloor/radiator).
+        const relayTarget = device.powerRelay != null
+          ? { centralUnit: device.centralUnit, functionCode: 1, number: device.powerRelay }
+          : null;
+        const isOn = () =>
+          relayTarget ? Boolean(this.client.getCachedState(relayTarget)?.normalized?.on)
+                      : Boolean(cached()?.on);
+        const setPower = async (on) => {
+          if (relayTarget) { await client.setLightPower(relayTarget, on); return; }
+          if (Boolean(cached()?.on) !== on) await client.toggleHeatingPower(device.id); // SET_TEMPONOFF toggle
+        };
+        // Teletask mode byte: 94=Auto, 95=Heat, 96=Cool. Derive the real heat/cool state.
         const cooling = (n) => n?.mode === 96 || (device.climate === "cool" && n?.mode !== 95);
         const activeState = (n) =>
-          !n?.on ? C.CurrentHeatingCoolingState.OFF
+          !isOn() ? C.CurrentHeatingCoolingState.OFF
           : cooling(n) ? C.CurrentHeatingCoolingState.COOL
           : C.CurrentHeatingCoolingState.HEAT;
         const targetState = (n) => {
-          if (!n?.on) return T.OFF;
+          if (!isOn()) return T.OFF;
           if (device.climate === "heat") return T.HEAT;
           if (device.climate === "cool") return T.COOL;
           if (n?.mode === 94) return T.AUTO;
@@ -283,8 +294,13 @@ class TeletaskPlatform {
         service.getCharacteristic(T)
           .onGet(() => targetState(cached()))
           .onSet(async (value) => {
-            const mode = { [T.OFF]: "stop", [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
-            await client.setHeatingMode(device.id, mode);
+            if (value === T.OFF) { await setPower(false); return; }
+            await setPower(true);
+            // For zone-controlled (AC) thermostats, also set the heat/cool/auto mode.
+            if (!relayTarget) {
+              const mode = { [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
+              await client.setHeatingMode(device.id, mode);
+            }
           });
         service.getCharacteristic(C.CurrentHeatingCoolingState).onGet(() => activeState(cached()));
 

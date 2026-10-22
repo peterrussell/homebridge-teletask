@@ -94,6 +94,11 @@
               "title": "Borrow temperature from zone (thermostats only)",
               "type": "integer",
               "description": "For a zone with no temperature of its own (e.g. AC): sensor-zone number to read the current temperature from instead."
+            },
+            "powerRelay": {
+              "title": "On/off via relay (thermostats only)",
+              "type": "integer",
+              "description": "Relay output number to use for the thermostat's on/off (e.g. an underfloor-heating circuit), instead of the zone's own power toggle."
             }
           }
         }
