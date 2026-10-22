@@ -253,12 +253,21 @@ class TeletaskPlatform {
         service.getCharacteristic(T).setProps({ validValues: valid });
 
         const clamp = (t) => Math.max(5, Math.min(35, t));
+        // Teletask mode byte: 94=Auto, 95=Heat, 96=Cool. Derive the real heat/cool state
+        // from the zone (so a reverse-cycle AC shows the right one), falling back to the
+        // climate hint when the mode isn't reported.
+        const cooling = (n) => n?.mode === 96 || (device.climate === "cool" && n?.mode !== 95);
         const activeState = (n) =>
           !n?.on ? C.CurrentHeatingCoolingState.OFF
-          : device.climate === "cool" ? C.CurrentHeatingCoolingState.COOL
+          : cooling(n) ? C.CurrentHeatingCoolingState.COOL
           : C.CurrentHeatingCoolingState.HEAT;
-        const targetState = (n) =>
-          !n?.on ? T.OFF : device.climate === "cool" ? T.COOL : T.HEAT;
+        const targetState = (n) => {
+          if (!n?.on) return T.OFF;
+          if (device.climate === "heat") return T.HEAT;
+          if (device.climate === "cool") return T.COOL;
+          if (n?.mode === 94) return T.AUTO;
+          return n?.mode === 96 ? T.COOL : T.HEAT;
+        };
 
         service.getCharacteristic(C.CurrentTemperature)
           .onGet(() => { const v = cached()?.valueCelsius; return typeof v === "number" ? v : 20; });
