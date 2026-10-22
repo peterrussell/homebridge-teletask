@@ -89,6 +89,11 @@
                 { "title": "Heat + Cool + Auto", "enum": ["auto"] }
               ],
               "description": "For thermostat/heating accessories: limits HomeKit to the modes the zone supports."
+            },
+            "temperatureFrom": {
+              "title": "Borrow temperature from zone (thermostats only)",
+              "type": "integer",
+              "description": "For a zone with no temperature of its own (e.g. AC): sensor-zone number to read the current temperature from instead."
             }
           }
         }

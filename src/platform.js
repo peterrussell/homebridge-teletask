@@ -53,7 +53,8 @@ class TeletaskPlatform {
           number,
           name: a.name ?? id,
           invertPosition: Boolean(a.invertPosition),
-          climate: a.climate ? String(a.climate).toLowerCase() : "auto"
+          climate: a.climate ? String(a.climate).toLowerCase() : "auto",
+          temperatureFrom: a.temperatureFrom != null ? Number(a.temperatureFrom) : null
         };
       });
   }
@@ -269,8 +270,13 @@ class TeletaskPlatform {
           return n?.mode === 96 ? T.COOL : T.HEAT;
         };
 
-        service.getCharacteristic(C.CurrentTemperature)
-          .onGet(() => { const v = cached()?.valueCelsius; return typeof v === "number" ? v : 20; });
+        // Some AC zones report no temperature of their own; borrow it from a co-located
+        // sensor zone (same room) via "temperatureFrom".
+        const tempSource = device.temperatureFrom
+          ? () => this.client.getCachedState({ centralUnit: device.centralUnit, functionCode: 20, number: device.temperatureFrom })?.normalized ?? null
+          : cached;
+        const readTemp = () => { const v = tempSource()?.valueCelsius; return typeof v === "number" ? v : 20; };
+        service.getCharacteristic(C.CurrentTemperature).onGet(readTemp);
         service.getCharacteristic(C.TargetTemperature)
           .onGet(() => { const t = cached()?.targetCelsius; return typeof t === "number" ? clamp(t) : 20; })
           .onSet(async (value) => { await client.setHeatingTargetTemperature(device.id, Number(value)); });
@@ -283,7 +289,7 @@ class TeletaskPlatform {
         service.getCharacteristic(C.CurrentHeatingCoolingState).onGet(() => activeState(cached()));
 
         update = (n) => {
-          if (typeof n?.valueCelsius === "number") service.updateCharacteristic(C.CurrentTemperature, n.valueCelsius);
+          service.updateCharacteristic(C.CurrentTemperature, readTemp());
           if (typeof n?.targetCelsius === "number") service.updateCharacteristic(C.TargetTemperature, clamp(n.targetCelsius));
           service.updateCharacteristic(T, targetState(n));
           service.updateCharacteristic(C.CurrentHeatingCoolingState, activeState(n));
