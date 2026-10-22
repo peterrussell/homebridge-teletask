@@ -1,0 +1,24 @@
+{
+  "name": "homebridge-teletask",
+  "displayName": "Homebridge Teletask",
+  "version": "0.1.0",
+  "description": "Homebridge plugin that bridges TELETASK DoIP relays, dimmers, blinds and sensors into Apple HomeKit, using the teletask-api library.",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20",
+    "homebridge": ">=1.8.0"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "teletask",
+    "doip",
+    "home-automation",
+    "homekit"
+  ],
+  "author": "Peter Russell",
+  "license": "MIT",
+  "dependencies": {
+    "teletask-api": "file:.."
+  }
+}

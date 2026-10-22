@@ -1,0 +1,87 @@
+{
+  "pluginAlias": "Teletask",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Bridges TELETASK DoIP devices into HomeKit. Requires an active TDS15132 (DoIP Open Protocol) license on your central unit — see the plugin README.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Teletask",
+        "required": true
+      },
+      "host": {
+        "title": "Central unit IP address",
+        "type": "string",
+        "format": "ipv4",
+        "required": true,
+        "placeholder": "192.168.1.113"
+      },
+      "port": {
+        "title": "Port",
+        "type": "integer",
+        "default": 55957,
+        "description": "DoIP Open Protocol port. Leave at 55957 unless you changed it in PROSOFT."
+      },
+      "centralUnit": {
+        "title": "Default central unit",
+        "type": "integer",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Central unit index (1 = 'A'). Can be overridden per accessory."
+      },
+      "accessories": {
+        "title": "Accessories",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true
+            },
+            "type": {
+              "title": "Type",
+              "type": "string",
+              "default": "light",
+              "oneOf": [
+                { "title": "Light (relay)", "enum": ["light"] },
+                { "title": "Switch (relay)", "enum": ["switch"] },
+                { "title": "Fan (relay)", "enum": ["fan"] },
+                { "title": "Outlet (relay)", "enum": ["outlet"] },
+                { "title": "Dimmer", "enum": ["dimmer"] },
+                { "title": "Blind / Window Covering (motor)", "enum": ["blind"] },
+                { "title": "Thermostat (experimental)", "enum": ["thermostat"] },
+                { "title": "Temperature sensor", "enum": ["sensor"] }
+              ],
+              "required": true
+            },
+            "number": {
+              "title": "Output / function number",
+              "type": "integer",
+              "required": true,
+              "description": "The output number from PROSOFT (GUISOFT > Define Output)."
+            },
+            "centralUnit": {
+              "title": "Central unit (optional)",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10,
+              "description": "Overrides the default central unit for this accessory."
+            },
+            "invertPosition": {
+              "title": "Invert blind position",
+              "type": "boolean",
+              "default": false,
+              "description": "Blinds only: flip if HomeKit open/closed is reversed."
+            }
+          }
+        }
+      }
+    }
+  }
+}
