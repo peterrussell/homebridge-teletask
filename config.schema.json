@@ -78,6 +78,17 @@
               "type": "boolean",
               "default": false,
               "description": "Blinds only: flip if HomeKit open/closed is reversed."
+            },
+            "climate": {
+              "title": "Climate mode (thermostats only)",
+              "type": "string",
+              "default": "auto",
+              "oneOf": [
+                { "title": "Heat only (radiator)", "enum": ["heat"] },
+                { "title": "Cool only (AC)", "enum": ["cool"] },
+                { "title": "Heat + Cool + Auto", "enum": ["auto"] }
+              ],
+              "description": "For thermostat/heating accessories: limits HomeKit to the modes the zone supports."
             }
           }
         }

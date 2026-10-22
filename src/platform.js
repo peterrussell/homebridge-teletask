@@ -52,7 +52,8 @@ class TeletaskPlatform {
           centralUnit,
           number,
           name: a.name ?? id,
-          invertPosition: Boolean(a.invertPosition)
+          invertPosition: Boolean(a.invertPosition),
+          climate: a.climate ? String(a.climate).toLowerCase() : "auto"
         };
       });
   }
@@ -238,25 +239,45 @@ class TeletaskPlatform {
 
       case "thermostat":
       case "heating": {
-        // Experimental — the sensor/climate decode has two protocol generations;
-        // verify against your unit (see teletask-api README).
         const service = accessory.addService(S.Thermostat, device.name);
-        service.getCharacteristic(C.CurrentTemperature).onGet(() => Number(cached()?.valueCelsius ?? 20));
-        service
-          .getCharacteristic(C.TargetTemperature)
-          .onGet(() => Number(cached()?.targetCelsius ?? 20))
+        // Teletask setpoints can dip below HomeKit's default 10°C min (frost ≈ 5°C).
+        service.getCharacteristic(C.TargetTemperature).setProps({ minValue: 5, maxValue: 35, minStep: 0.5 });
+
+        // Restrict modes: climate:"heat" = radiators (off/heat), "cool" = AC (off/cool),
+        // anything else = full off/heat/cool/auto.
+        const T = C.TargetHeatingCoolingState;
+        const valid =
+          device.climate === "heat" ? [T.OFF, T.HEAT]
+          : device.climate === "cool" ? [T.OFF, T.COOL]
+          : [T.OFF, T.HEAT, T.COOL, T.AUTO];
+        service.getCharacteristic(T).setProps({ validValues: valid });
+
+        const clamp = (t) => Math.max(5, Math.min(35, t));
+        const activeState = (n) =>
+          !n?.on ? C.CurrentHeatingCoolingState.OFF
+          : device.climate === "cool" ? C.CurrentHeatingCoolingState.COOL
+          : C.CurrentHeatingCoolingState.HEAT;
+        const targetState = (n) =>
+          !n?.on ? T.OFF : device.climate === "cool" ? T.COOL : T.HEAT;
+
+        service.getCharacteristic(C.CurrentTemperature)
+          .onGet(() => { const v = cached()?.valueCelsius; return typeof v === "number" ? v : 20; });
+        service.getCharacteristic(C.TargetTemperature)
+          .onGet(() => { const t = cached()?.targetCelsius; return typeof t === "number" ? clamp(t) : 20; })
+          .onSet(async (value) => { await client.setHeatingTargetTemperature(device.id, Number(value)); });
+        service.getCharacteristic(T)
+          .onGet(() => targetState(cached()))
           .onSet(async (value) => {
-            await client.setHeatingTargetTemperature(device.id, Number(value));
-          });
-        service
-          .getCharacteristic(C.TargetHeatingCoolingState)
-          .onSet(async (value) => {
-            const mode = { 0: "stop", 1: "heat", 2: "cool", 3: "auto" }[value] ?? "auto";
+            const mode = { [T.OFF]: "stop", [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
             await client.setHeatingMode(device.id, mode);
           });
+        service.getCharacteristic(C.CurrentHeatingCoolingState).onGet(() => activeState(cached()));
+
         update = (n) => {
           if (typeof n?.valueCelsius === "number") service.updateCharacteristic(C.CurrentTemperature, n.valueCelsius);
-          if (typeof n?.targetCelsius === "number") service.updateCharacteristic(C.TargetTemperature, n.targetCelsius);
+          if (typeof n?.targetCelsius === "number") service.updateCharacteristic(C.TargetTemperature, clamp(n.targetCelsius));
+          service.updateCharacteristic(T, targetState(n));
+          service.updateCharacteristic(C.CurrentHeatingCoolingState, activeState(n));
         };
         break;
       }
