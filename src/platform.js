@@ -180,9 +180,7 @@ class TeletaskPlatform {
         service
           .getCharacteristic(C.On)
           .onGet(() => Boolean(cached()?.on))
-          .onSet(async (value) => {
-            await client.setLightPower(device.id, Boolean(value));
-          });
+          .onSet((value) => this._fire(device.name, () => client.setLightPower(device.id, Boolean(value))));
         update = (n) => service.updateCharacteristic(C.On, Boolean(n?.on));
         break;
       }
@@ -209,22 +207,22 @@ class TeletaskPlatform {
         service
           .getCharacteristic(C.On)
           .onGet(() => isOn())
-          .onSet(async (value) => {
+          .onSet((value) => this._fire(device.name, async () => {
             if (relayTarget) {
               await client.setLightPower(relayTarget, Boolean(value));
               if (value) await client.setDimmerLevel(device.id, toLevel(lastHk || 100));
             } else {
               await client.setDimmerLevel(device.id, value ? toLevel(lastHk || 100) : 0);
             }
-          });
+          }));
         service
           .getCharacteristic(C.Brightness)
           .onGet(() => toHk(Number(cached()?.level ?? 0)))
-          .onSet(async (value) => {
+          .onSet((value) => this._fire(device.name, () => {
             const hk = Number(value);
             if (hk > 0) lastHk = hk;
-            await client.setDimmerLevel(device.id, toLevel(hk));
-          });
+            return client.setDimmerLevel(device.id, toLevel(hk));
+          }));
         update = (n) => {
           service.updateCharacteristic(C.On, isOn());
           if (typeof n?.level === "number") {
@@ -248,9 +246,8 @@ class TeletaskPlatform {
           const n = cached();
           return n && typeof n.position === "number" ? toHomeKit(n.position) : 0;
         });
-        service.getCharacteristic(C.TargetPosition).onSet(async (value) => {
-          await client.setBlindPosition(device.id, fromHomeKit(Number(value)));
-        });
+        service.getCharacteristic(C.TargetPosition).onSet((value) =>
+          this._fire(device.name, () => client.setBlindPosition(device.id, fromHomeKit(Number(value)))));
         service.getCharacteristic(C.PositionState).onGet(() => C.PositionState.STOPPED);
 
         update = (n) => {
@@ -320,10 +317,10 @@ class TeletaskPlatform {
         service.getCharacteristic(C.CurrentTemperature).onGet(readTemp);
         service.getCharacteristic(C.TargetTemperature)
           .onGet(() => { const t = cached()?.targetCelsius; return typeof t === "number" ? clamp(t) : 20; })
-          .onSet(async (value) => { await client.setHeatingTargetTemperature(device.id, Number(value)); });
+          .onSet((value) => this._fire(device.name, () => client.setHeatingTargetTemperature(device.id, Number(value))));
         service.getCharacteristic(T)
           .onGet(() => targetState(cached()))
-          .onSet(async (value) => {
+          .onSet((value) => this._fire(device.name, async () => {
             if (value === T.OFF) { await setPower(false); return; }
             await setPower(true);
             // For zone-controlled (AC) thermostats, also set the heat/cool/auto mode.
@@ -331,7 +328,7 @@ class TeletaskPlatform {
               const mode = { [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
               await client.setHeatingMode(device.id, mode);
             }
-          });
+          }));
         service.getCharacteristic(C.CurrentHeatingCoolingState).onGet(() => activeState(cached()));
 
         update = (n) => {
@@ -359,12 +356,19 @@ class TeletaskPlatform {
         service
           .getCharacteristic(C.On)
           .onGet(() => Boolean(cached()?.on))
-          .onSet(async (value) => client.setLightPower(device.id, Boolean(value)));
+          .onSet((value) => this._fire(device.name, () => client.setLightPower(device.id, Boolean(value))));
         update = (n) => service.updateCharacteristic(C.On, Boolean(n?.on));
       }
     }
 
     this.handlers.set(device.id, { accessory, device, update });
+  }
+
+  // Run a set operation without blocking HomeKit on the state read-back. Some outputs
+  // (e.g. the Ventax fans) don't reply to a Get, so the library's confirming getState
+  // can time out; that must never hang or error the HomeKit write handler.
+  _fire(label, fn) {
+    Promise.resolve().then(fn).catch((e) => this.log.debug(`set ${label}: ${e?.message ?? e}`));
   }
 
   _onStateChanged(state) {
