@@ -3,7 +3,6 @@
   "displayName": "Homebridge Teletask",
   "version": "0.1.0",
   "description": "Homebridge plugin that bridges TELETASK DoIP relays, dimmers, blinds and sensors into Apple HomeKit, using the teletask-api library.",
-  "type": "module",
   "main": "index.js",
   "engines": {
     "node": ">=18",

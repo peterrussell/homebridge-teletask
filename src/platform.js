@@ -1,10 +1,11 @@
-import { TeletaskClient } from "teletask-api";
-import { PLATFORM_NAME, PLUGIN_NAME } from "./settings.js";
+// CommonJS plugin. teletask-api is an ES module, so it's loaded lazily via dynamic
+// import() inside _start() (which runs async on didFinishLaunching).
+const { PLATFORM_NAME, PLUGIN_NAME } = require("./settings.js");
 
 const RECONNECT_MS = 10000;
 
 // Dynamic Homebridge platform that bridges TELETASK DoIP devices into HomeKit.
-export class TeletaskPlatform {
+class TeletaskPlatform {
   constructor(log, config, api) {
     this.log = log;
     this.config = config ?? {};
@@ -60,6 +61,9 @@ export class TeletaskPlatform {
     if (!this.devices.length) {
       this.log.warn("No accessories configured — add some in the plugin settings.");
     }
+
+    // teletask-api is ESM; load it here (async context) from this CommonJS module.
+    const { TeletaskClient } = await import("teletask-api");
 
     // Register the devices with the client so state reports carry deviceId.
     this.client = new TeletaskClient({
@@ -301,3 +305,5 @@ export class TeletaskPlatform {
     this.cachedAccessories.clear();
   }
 }
+
+module.exports = { TeletaskPlatform };

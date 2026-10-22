@@ -1,4 +1,6 @@
 // Must match the "pluginAlias" / "name" used by Homebridge.
-export const PLUGIN_NAME = "homebridge-teletask";
+const PLUGIN_NAME = "homebridge-teletask";
 // Must match the "platform" value users put in their Homebridge config.json.
-export const PLATFORM_NAME = "Teletask";
+const PLATFORM_NAME = "Teletask";
+
+module.exports = { PLUGIN_NAME, PLATFORM_NAME };
