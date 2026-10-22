@@ -6,7 +6,7 @@
   "main": "index.js",
   "engines": {
     "node": ">=18",
-    "homebridge": ">=1.6.0"
+    "homebridge": "^1.6.0 || ^2.0.0"
   },
   "keywords": [
     "homebridge-plugin",
