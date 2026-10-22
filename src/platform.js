@@ -187,21 +187,41 @@ class TeletaskPlatform {
 
       case "dimmer": {
         const service = accessory.addService(S.Lightbulb, device.name);
+        // A Teletask dimmer only takes a level (0 = off, >0 = on). There is no separate
+        // on/off command, so map HomeKit On/Off to the level. Optionally, a powerRelay
+        // can provide a hard on/off (light that needs a relay for power).
+        const relayTarget = device.powerRelay != null
+          ? { centralUnit: device.centralUnit, functionCode: 1, number: device.powerRelay }
+          : null;
+        let lastLevel = 100; // remember the last non-zero level to restore on "On"
+        const isOn = () =>
+          relayTarget ? Boolean(this.client.getCachedState(relayTarget)?.normalized?.on)
+                      : Boolean(cached()?.on);
         service
           .getCharacteristic(C.On)
-          .onGet(() => Boolean(cached()?.on))
+          .onGet(() => isOn())
           .onSet(async (value) => {
-            await client.setLightPower(device.id, Boolean(value));
+            if (relayTarget) {
+              await client.setLightPower(relayTarget, Boolean(value));
+              if (value) await client.setDimmerLevel(device.id, lastLevel || 100);
+            } else {
+              await client.setDimmerLevel(device.id, value ? (lastLevel || 100) : 0);
+            }
           });
         service
           .getCharacteristic(C.Brightness)
           .onGet(() => Number(cached()?.level ?? 0))
           .onSet(async (value) => {
-            await client.setDimmerLevel(device.id, Number(value));
+            const v = Number(value);
+            if (v > 0) lastLevel = v;
+            await client.setDimmerLevel(device.id, v);
           });
         update = (n) => {
-          service.updateCharacteristic(C.On, Boolean(n?.on));
-          if (typeof n?.level === "number") service.updateCharacteristic(C.Brightness, n.level);
+          service.updateCharacteristic(C.On, isOn());
+          if (typeof n?.level === "number") {
+            if (n.level > 0) lastLevel = n.level;
+            service.updateCharacteristic(C.Brightness, n.level);
+          }
         };
         break;
       }
