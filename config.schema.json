@@ -55,7 +55,8 @@
                 { "title": "Outlet (relay)", "enum": ["outlet"] },
                 { "title": "Dimmer", "enum": ["dimmer"] },
                 { "title": "Blind / Window Covering (motor)", "enum": ["blind"] },
-                { "title": "Thermostat (experimental)", "enum": ["thermostat"] },
+                { "title": "Thermostat / climate zone", "enum": ["thermostat"] },
+                { "title": "Heating zone (same as thermostat)", "enum": ["heating"] },
                 { "title": "Temperature sensor", "enum": ["sensor"] }
               ],
               "required": true
