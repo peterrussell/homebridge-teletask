@@ -10,7 +10,7 @@
   },
   "scripts": {
     "bundle": "node scripts/bundle-lib.mjs",
-    "prepare": "node scripts/bundle-lib.mjs"
+    "prepublishOnly": "node scripts/bundle-lib.mjs"
   },
   "files": [
     "index.js",
