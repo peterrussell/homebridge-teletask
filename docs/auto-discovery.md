@@ -30,6 +30,23 @@ The entry stays in the config (so it's not re‑added on the next startup) but i
 HomeKit**. This is the intended workflow for the spare/unused outputs discovery turns up:
 hide them once, and they stay hidden, while genuinely new outputs still surface.
 
+## "Likely UNUSED" hints
+
+Discovery adds a hint to the `_note` of any **new** output whose state at startup looks like an
+unconfigured one:
+
+```json
+{ "name": "Light 14", "type": "light", "outputId": 14,
+  "_note": "auto-discovered 2026-10-23 — rename, or set \"visible\": false to ignore. Likely UNUSED: reads ON at discovery — if this isn't a light you left on, it's likely unused" }
+```
+
+This is a **hint, not a decision** — the plugin never hides anything automatically. The DoIP
+protocol has no "is a device wired?" field, and the signals overlap with real states: a relay
+that's simply **switched on** reports the same byte (`0xFF`) as an unused one, and an unused
+motor looks like a **fully‑closed blind**. So an output you have on/closed at restart may be
+flagged too. Treat the hint as "worth a look"; set `"visible": false` on the ones that really
+are spare. Dimmers get no hint (used and unused read identically).
+
 ## Typical first‑run workflow
 
 1. Enable the plugin with just `host`/`port` and restart.

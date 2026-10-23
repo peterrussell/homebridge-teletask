@@ -9,6 +9,21 @@ const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 
 const TYPE_FOR_FN = { 1: "light", 2: "dimmer", 6: "blind", 20: "thermostat" };
 const LABEL_FOR_FN = { 1: "Light", 2: "Dimmer", 6: "Blind", 20: "Zone" };
 
+// Discovery-time "looks unused" heuristic. The DoIP state byte can't *prove* a load is
+// wired — verified against a real unit: a switched-ON relay reads 0xFF, identical to an
+// unused one, and an unused motor reads like a fully-closed blind. So we never auto-hide;
+// we only add a note on NEW outputs whose state matches an unused fingerprint, so they're
+// easy to spot and hide by hand (set "visible": false).
+function likelyUnusedHint(functionCode, state) {
+  if (functionCode === 1 && (state?.[0] ?? 0) !== 0) {
+    return "reads ON at discovery — if this isn't a light you left on, it's likely unused";
+  }
+  if (functionCode === 6 && (state?.[0] ?? 0) === 2 && (state?.[3] ?? 0) === 100) {
+    return "reads fully-closed/idle at discovery — if this isn't a blind you keep closed, it's likely unused";
+  }
+  return null;
+}
+
 // Dynamic Homebridge platform that bridges TELETASK DoIP devices into HomeKit.
 class TeletaskPlatform {
   constructor(log, config, api) {
@@ -228,12 +243,17 @@ class TeletaskPlatform {
         const t = temp2(state);
         entry.climate = t !== null && t > -50 && t < 80 ? "heat" : "auto";
       }
-      entry._note = `auto-discovered ${today} — rename, or set "visible": false to ignore`;
+      const hint = likelyUnusedHint(fn, state);
+      entry._note =
+        `auto-discovered ${today} — rename, or set "visible": false to ignore` +
+        (hint ? `. Likely UNUSED: ${hint}` : "");
       accessories.push(entry);
       added++;
       this.log.info(
-        `Auto-discover: new ${type} (outputId ${number}) not in config — added as "${entry.name}". ` +
-          `Rename it, or set "visible": false to ignore it.`
+        `Auto-discover: new ${type} (outputId ${number}) not in config — added as "${entry.name}".` +
+          (hint
+            ? ` Likely UNUSED — ${hint}; set "visible": false to hide.`
+            : ` Rename it, or set "visible": false to ignore it.`)
       );
     }
 
