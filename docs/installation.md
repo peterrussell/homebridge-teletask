@@ -38,19 +38,23 @@ cd homebridge-teletask
 # 2. install it into Homebridge as a tracked dependency (copies, doesn't symlink).
 #    This also fetches the pinned teletask-api library over SSH.
 cd /var/lib/homebridge
-echo "install-links=true" | sudo tee -a .npmrc            # so upgrades keep copying it
-sudo GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+grep -q install-links .npmrc 2>/dev/null || echo "install-links=true" | sudo tee -a .npmrc
+sudo HOME="$HOME" npm_config_cache=/root/.npm \
   npm install --install-links ~/homebridge-teletask
 sudo chown -R --reference=/var/lib/homebridge/node_modules/homebridge \
   /var/lib/homebridge/node_modules/homebridge-teletask
 sudo hb-service restart
 ```
 
-> **Why `GIT_SSH_COMMAND`?** `sudo npm install` runs as **root**, which doesn't have your SSH
-> key, so cloning the private `teletask-api` repo would fail. The env var points root's git at
-> *your* key. `$HOME` expands to your home before `sudo` runs, so the path resolves to your
-> key — adjust `id_ed25519` to whatever key can read the repo (the same one your `git clone`
-> above used).
+> **Why `HOME="$HOME"`?** `sudo npm install` runs as **root**, which has no SSH key, so cloning
+> the private `teletask-api` repo fails with *Permission denied (publickey)*. Pointing `HOME` at
+> your home makes root's `git`/`ssh` read **your** `~/.ssh` (keys, `config` and `known_hosts`),
+> so it authenticates exactly as your own `git clone` does — whatever your key is named, and with
+> no host-key prompt. `$HOME` expands before `sudo` runs; root can read your files.
+> `npm_config_cache=/root/.npm` stops root leaving root-owned files in your `~/.npm`.
+>
+> If your key lives only in an ssh-agent (no file root can read), use
+> `GIT_SSH_COMMAND="ssh -i /path/to/key"` with a readable key file instead.
 >
 > Paths assume the official Homebridge image (storage at `/var/lib/homebridge`). The key is
 > installing into the folder Homebridge actually scans for plugins — check its startup log for
@@ -72,7 +76,7 @@ number hasn't changed — leaving the old build in place. So bump the plugin's `
 cd ~/homebridge-teletask && git pull
 cd /var/lib/homebridge
 sudo npm uninstall homebridge-teletask
-sudo GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+sudo HOME="$HOME" npm_config_cache=/root/.npm \
   npm install --install-links ~/homebridge-teletask
 sudo hb-service restart
 ```
