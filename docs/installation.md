@@ -39,11 +39,24 @@ sudo hb-service restart
 
 ## Updating
 
+`npm install` can report *"up to date"* and **skip re-copying** a local package whose
+version number hasn't changed — leaving the old build in place. So either bump the
+plugin's `version` in `package.json` each release, or uninstall first to force a clean
+re-copy:
+
 ```bash
 cd ~/teletask && git pull
 cd homebridge-teletask && npm run bundle
-cd /var/lib/homebridge && sudo npm install --install-links ~/teletask/homebridge-teletask
+cd /var/lib/homebridge
+sudo npm uninstall homebridge-teletask
+sudo npm install --install-links ~/teletask/homebridge-teletask
 sudo hb-service restart
+```
+
+Confirm the new build loaded — the version in the log should match `package.json`:
+
+```bash
+sudo hb-service logs | grep -i "loaded plugin: homebridge-teletask"
 ```
 
 ## Verify it loaded
