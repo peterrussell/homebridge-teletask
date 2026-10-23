@@ -13,7 +13,7 @@
         "required": true
       },
       "host": {
-        "title": "Central unit IP address",
+        "title": "Central Unit IP Address",
         "type": "string",
         "format": "ipv4",
         "required": true,
@@ -26,13 +26,13 @@
         "description": "DoIP port — leave at 55957 unless you changed it in PROSOFT."
       },
       "centralUnit": {
-        "title": "Default central unit",
+        "title": "Default Central Unit",
         "type": "integer",
         "default": 1,
         "description": "Central unit index (1 = 'A')."
       },
       "autoDiscover": {
-        "title": "Auto-discover outputs on startup",
+        "title": "Auto-Discover Outputs on Startup",
         "type": "boolean",
         "default": true,
         "description": "Probe the unit at startup and add any new outputs. Uncheck to disable."
@@ -53,15 +53,15 @@
               "type": "string",
               "default": "light",
               "oneOf": [
-                { "title": "Light (relay)", "enum": ["light"] },
-                { "title": "Switch (relay)", "enum": ["switch"] },
-                { "title": "Fan (relay)", "enum": ["fan"] },
-                { "title": "Outlet (relay)", "enum": ["outlet"] },
+                { "title": "Light (Relay)", "enum": ["light"] },
+                { "title": "Switch (Relay)", "enum": ["switch"] },
+                { "title": "Fan (Relay)", "enum": ["fan"] },
+                { "title": "Outlet (Relay)", "enum": ["outlet"] },
                 { "title": "Dimmer", "enum": ["dimmer"] },
-                { "title": "Blind / Window Covering (motor)", "enum": ["blind"] },
-                { "title": "Thermostat / climate zone", "enum": ["thermostat"] },
-                { "title": "Heating zone (same as thermostat)", "enum": ["heating"] },
-                { "title": "Temperature sensor", "enum": ["sensor"] }
+                { "title": "Blind / Window Covering (Motor)", "enum": ["blind"] },
+                { "title": "Thermostat / Climate Zone", "enum": ["thermostat"] },
+                { "title": "Heating Zone (Same as Thermostat)", "enum": ["heating"] },
+                { "title": "Temperature Sensor", "enum": ["sensor"] }
               ],
               "required": true
             },
@@ -78,44 +78,44 @@
               "description": "Uncheck to keep in config but hide from HomeKit."
             },
             "centralUnit": {
-              "title": "Central unit (optional)",
+              "title": "Central Unit (Optional)",
               "type": "integer",
               "description": "Overrides the default central unit for this accessory."
             },
             "invertPosition": {
-              "title": "Invert blind position",
+              "title": "Invert Blind Position",
               "type": "boolean",
               "default": false,
               "description": "Flip if open/closed is reversed."
             },
             "climate": {
-              "title": "Climate mode",
+              "title": "Climate Mode",
               "type": "string",
               "default": "auto",
               "oneOf": [
-                { "title": "Heat only (radiator)", "enum": ["heat"] },
-                { "title": "Cool only (AC)", "enum": ["cool"] },
+                { "title": "Heat Only (Radiator)", "enum": ["heat"] },
+                { "title": "Cool Only (AC)", "enum": ["cool"] },
                 { "title": "Heat + Cool + Auto", "enum": ["auto"] }
               ],
               "description": "Modes the zone supports."
             },
             "temperatureFrom": {
-              "title": "Borrow temperature from zone",
+              "title": "Borrow Temperature From Zone",
               "type": "integer",
               "description": "Read temperature from another zone (for AC with no sensor of its own)."
             },
             "powerRelay": {
-              "title": "On/off via relay",
+              "title": "On/Off via Relay",
               "type": "integer",
               "description": "Relay output used for true on/off."
             },
             "minBrightness": {
-              "title": "Min level (HomeKit 1%)",
+              "title": "Min Level (HomeKit 1%)",
               "type": "integer",
               "description": "Teletask level (0-100) at HomeKit 1%."
             },
             "maxBrightness": {
-              "title": "Max level (HomeKit 100%)",
+              "title": "Max Level (HomeKit 100%)",
               "type": "integer",
               "description": "Teletask level (0-100) at HomeKit 100% (e.g. 75)."
             }
@@ -125,12 +125,15 @@
     }
   },
   "layout": [
-    "name",
-    "host",
     {
       "type": "flex",
       "flex-flow": "row wrap",
-      "items": ["port", "centralUnit"]
+      "items": ["name", "centralUnit"]
+    },
+    {
+      "type": "flex",
+      "flex-flow": "row wrap",
+      "items": ["host", "port"]
     },
     "autoDiscover",
     {
