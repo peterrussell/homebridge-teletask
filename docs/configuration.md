@@ -12,11 +12,11 @@ in the Homebridge UI (*Config*) or in `config.json`.
   "centralUnit": 1,
   "autoDiscover": true,
   "accessories": [
-    { "name": "Kitchen Light", "type": "light", "number": 13 },
-    { "name": "Living Room Dimmer", "type": "dimmer", "number": 1, "maxBrightness": 75, "powerRelay": 16 },
-    { "name": "Living Room Blind", "type": "blind", "number": 5, "invertPosition": true },
-    { "name": "Living Room Heating", "type": "thermostat", "number": 3, "climate": "heat", "powerRelay": 17 },
-    { "name": "Living Room Aircon", "type": "thermostat", "number": 9, "climate": "auto", "temperatureFrom": 3 }
+    { "name": "Kitchen Light", "type": "light", "outputId": 13 },
+    { "name": "Living Room Dimmer", "type": "dimmer", "outputId": 1, "maxBrightness": 75, "powerRelay": 16 },
+    { "name": "Living Room Blind", "type": "blind", "outputId": 5, "invertPosition": true },
+    { "name": "Living Room Heating", "type": "thermostat", "outputId": 3, "climate": "heat", "powerRelay": 17 },
+    { "name": "Living Room Aircon", "type": "thermostat", "outputId": 9, "climate": "auto", "temperatureFrom": 3 }
   ]
 }
 ```
@@ -35,13 +35,13 @@ in the Homebridge UI (*Config*) or in `config.json`.
 
 ## Accessory options
 
-Every accessory needs at least `name`, `type` and `number`.
+Every accessory needs at least `name`, `type` and `outputId`.
 
 | Option | Applies to | Description |
 |---|---|---|
 | `name` | all | HomeKit name. |
 | `type` | all | `light`, `switch`, `fan`, `outlet`, `dimmer`, `blind`, `thermostat` (alias `heating`), `sensor`. |
-| `number` | all | The output number from PROSOFT (GUISOFT → *Define Output*). |
+| `outputId` | all | The output number from PROSOFT (GUISOFT → *Define Output*). The old key `number` is still accepted. |
 | `centralUnit` | all | Overrides the platform default for this accessory. |
 | `visible` | all | `false` keeps the entry in the config but hides it from HomeKit. |
 | `invertPosition` | blind | Flip if open/closed is reversed (TELETASK blinds are usually inverted → `true`). |

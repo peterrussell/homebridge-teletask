@@ -8,10 +8,10 @@ what the output actually drives.
 All four are the same relay under the hood; the `type` just changes how it looks in HomeKit.
 
 ```json
-{ "name": "Kitchen Light", "type": "light",  "number": 13 }
-{ "name": "Pump",          "type": "switch", "number": 24 }
-{ "name": "Bathroom Fan",  "type": "fan",    "number": 4 }
-{ "name": "Patio Socket",  "type": "outlet", "number": 7 }
+{ "name": "Kitchen Light", "type": "light",  "outputId": 13 }
+{ "name": "Pump",          "type": "switch", "outputId": 24 }
+{ "name": "Bathroom Fan",  "type": "fan",    "outputId": 4 }
+{ "name": "Patio Socket",  "type": "outlet", "outputId": 7 }
 ```
 
 The protocol can't tell a light from a fan from a pump — they're all relays — so choosing the
@@ -23,7 +23,7 @@ A TELETASK dimmer takes a **level only** (0 = off, >0 = on); there's no separate
 command. The plugin handles that for you, and adds two refinements:
 
 ```json
-{ "name": "Living Room Dimmer", "type": "dimmer", "number": 1, "minBrightness": 10, "maxBrightness": 75, "powerRelay": 16 }
+{ "name": "Living Room Dimmer", "type": "dimmer", "outputId": 1, "minBrightness": 10, "maxBrightness": 75, "powerRelay": 16 }
 ```
 
 - **`maxBrightness` / `minBrightness`** — map HomeKit's 1–100 % slider onto the lamp's real
@@ -36,7 +36,7 @@ command. The plugin handles that for you, and adds two refinements:
 ## Blinds / window coverings
 
 ```json
-{ "name": "Living Room Blind", "type": "blind", "number": 5, "invertPosition": true }
+{ "name": "Living Room Blind", "type": "blind", "outputId": 5, "invertPosition": true }
 ```
 
 - **`invertPosition`** — TELETASK motors usually treat 0 % as up/open and 100 % as
@@ -48,8 +48,8 @@ A TELETASK **climate/sensor zone** becomes a HomeKit Thermostat with current tem
 setpoint and mode.
 
 ```json
-{ "name": "Living Room Heating", "type": "thermostat", "number": 3, "climate": "heat", "powerRelay": 17 }
-{ "name": "Living Room Aircon",  "type": "thermostat", "number": 9, "climate": "auto", "temperatureFrom": 3 }
+{ "name": "Living Room Heating", "type": "thermostat", "outputId": 3, "climate": "heat", "powerRelay": 17 }
+{ "name": "Living Room Aircon",  "type": "thermostat", "outputId": 9, "climate": "auto", "temperatureFrom": 3 }
 ```
 
 - **`climate`** — restricts the modes HomeKit offers: `heat` (radiators/underfloor), `cool`
@@ -72,5 +72,5 @@ temperature is reliable; if a setpoint or mode change doesn't take on your firmw
 For a read‑only temperature reading (no control):
 
 ```json
-{ "name": "Outside Temp", "type": "sensor", "number": 12 }
+{ "name": "Outside Temp", "type": "sensor", "outputId": 12 }
 ```

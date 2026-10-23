@@ -45,11 +45,11 @@ class TeletaskPlatform {
     const defaultCU = Number(this.config.centralUnit ?? 1);
     const list = Array.isArray(this.config.accessories) ? this.config.accessories : [];
     return list
-      .filter((a) => a && a.type && a.number !== undefined && a.visible !== false)
+      .filter((a) => a && a.type && (a.outputId ?? a.number) !== undefined && a.visible !== false)
       .map((a) => {
         const type = String(a.type).trim().toLowerCase();
         const centralUnit = Number(a.centralUnit ?? defaultCU);
-        const number = Number(a.number);
+        const number = Number(a.outputId ?? a.number); // "number" accepted as a legacy alias
         const id = a.id ?? `${type}-cu${centralUnit}-n${number}`;
         return {
           id,
@@ -212,7 +212,7 @@ class TeletaskPlatform {
     const used = new Set();
     for (const a of accessories) {
       const fn = FN_FOR_TYPE[String(a.type ?? "").toLowerCase()];
-      if (fn) used.add(`${fn}:${Number(a.number)}`);
+      if (fn) used.add(`${fn}:${Number(a.outputId ?? a.number)}`);
       if (a.powerRelay != null) used.add(`1:${Number(a.powerRelay)}`);
       if (a.temperatureFrom != null) used.add(`20:${Number(a.temperatureFrom)}`);
     }
@@ -222,7 +222,7 @@ class TeletaskPlatform {
     for (const { fn, number, state } of [...found.values()].sort((a, b) => a.fn - b.fn || a.number - b.number)) {
       if (used.has(`${fn}:${number}`)) continue;
       const type = TYPE_FOR_FN[fn] ?? "switch";
-      const entry = { name: `${LABEL_FOR_FN[fn] ?? "Device"} ${number}`, type, number };
+      const entry = { name: `${LABEL_FOR_FN[fn] ?? "Device"} ${number}`, type, outputId: number };
       if (type === "blind") entry.invertPosition = true;
       if (type === "thermostat") {
         const t = temp2(state);
@@ -239,9 +239,9 @@ class TeletaskPlatform {
     for (const a of accessories) {
       const fn = FN_FOR_TYPE[String(a.type ?? "").toLowerCase()];
       if (!fn) continue;
-      const seen = found.has(`${fn}:${Number(a.number)}`);
+      const seen = found.has(`${fn}:${Number(a.outputId ?? a.number)}`);
       if (!seen && !a._discoveryNote && a._note == null) {
-        a._discoveryNote = `not seen by discovery ${today} — this number may be unconfigured on the unit`;
+        a._discoveryNote = `not seen by discovery ${today} — this outputId may be unconfigured on the unit`;
         flagged++;
       } else if (seen && a._discoveryNote) {
         delete a._discoveryNote;

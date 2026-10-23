@@ -67,11 +67,11 @@
               ],
               "required": true
             },
-            "number": {
+            "outputId": {
               "title": "Output / function number",
               "type": "integer",
               "required": true,
-              "description": "The output number from PROSOFT (GUISOFT > Define Output)."
+              "description": "The output number from PROSOFT (GUISOFT > Define Output). (The old key \"number\" is still accepted.)"
             },
             "visible": {
               "title": "Visible in HomeKit",

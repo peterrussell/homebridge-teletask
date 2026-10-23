@@ -9,7 +9,7 @@ Auto‑discovery keeps your config in sync with the central unit. It's **on by d
 2. **Appends new outputs** — anything found that isn't already in your config — to the bottom
    of `config.json`, with a generic name and a `_note`:
    ```json
-   { "name": "Light 14", "type": "light", "number": 14, "_note": "auto-discovered 2026-10-23 — rename, or set \"visible\": false to ignore" }
+   { "name": "Light 14", "type": "light", "outputId": 14, "_note": "auto-discovered 2026-10-23 — rename, or set \"visible\": false to ignore" }
    ```
    New outputs also appear in HomeKit **immediately**, no second restart needed.
 3. **Flags** any accessory already in your config whose number **doesn't respond** with a
@@ -23,7 +23,7 @@ It never rewrites your existing entries — your names, rooms and options are pr
 Set `"visible": false` on any accessory:
 
 ```json
-{ "name": "Light 15", "type": "light", "number": 15, "visible": false }
+{ "name": "Light 15", "type": "light", "outputId": 15, "visible": false }
 ```
 
 The entry stays in the config (so it's not re‑added on the next startup) but is **hidden from
