@@ -39,22 +39,25 @@ cd homebridge-teletask
 #    This also fetches the pinned teletask-api library over SSH.
 cd /var/lib/homebridge
 grep -q install-links .npmrc 2>/dev/null || echo "install-links=true" | sudo tee -a .npmrc
-sudo HOME="$HOME" npm_config_cache=/root/.npm \
+sudo --preserve-env=SSH_AUTH_SOCK HOME="$HOME" npm_config_cache=/root/.npm \
   npm install --install-links ~/homebridge-teletask
 sudo chown -R --reference=/var/lib/homebridge/node_modules/homebridge \
   /var/lib/homebridge/node_modules/homebridge-teletask
 sudo hb-service restart
 ```
 
-> **Why `HOME="$HOME"`?** `sudo npm install` runs as **root**, which has no SSH key, so cloning
-> the private `teletask-api` repo fails with *Permission denied (publickey)*. Pointing `HOME` at
-> your home makes root's `git`/`ssh` read **your** `~/.ssh` (keys, `config` and `known_hosts`),
-> so it authenticates exactly as your own `git clone` does — whatever your key is named, and with
-> no host-key prompt. `$HOME` expands before `sudo` runs; root can read your files.
-> `npm_config_cache=/root/.npm` stops root leaving root-owned files in your `~/.npm`.
+> **Why the extra env?** `sudo npm install` runs as **root**, which has no SSH credentials, so
+> cloning the private `teletask-api` repo fails with *Permission denied (publickey)*. The flags
+> hand root your credentials:
+> - `HOME="$HOME"` — root's `git`/`ssh` read **your** `~/.ssh` (`config` and `known_hosts`), so
+>   there's no host-key prompt. `$HOME` expands before `sudo` runs; root can read your files.
+> - `--preserve-env=SSH_AUTH_SOCK` — if your key is in an **ssh-agent** (including a forwarded
+>   agent, with no key file on the host), this passes the agent socket through so root can use it.
+> - `npm_config_cache=/root/.npm` — keeps root from leaving root-owned files in your `~/.npm`.
 >
-> If your key lives only in an ssh-agent (no file root can read), use
-> `GIT_SSH_COMMAND="ssh -i /path/to/key"` with a readable key file instead.
+> It authenticates exactly as your own `git clone` does, whatever your key is named and wherever
+> it lives. (A plain on-disk key works too — `HOME` alone finds it; the agent flag is then a
+> harmless no-op.)
 >
 > Paths assume the official Homebridge image (storage at `/var/lib/homebridge`). The key is
 > installing into the folder Homebridge actually scans for plugins — check its startup log for
@@ -76,7 +79,7 @@ number hasn't changed — leaving the old build in place. So bump the plugin's `
 cd ~/homebridge-teletask && git pull
 cd /var/lib/homebridge
 sudo npm uninstall homebridge-teletask
-sudo HOME="$HOME" npm_config_cache=/root/.npm \
+sudo --preserve-env=SSH_AUTH_SOCK HOME="$HOME" npm_config_cache=/root/.npm \
   npm install --install-links ~/homebridge-teletask
 sudo hb-service restart
 ```
