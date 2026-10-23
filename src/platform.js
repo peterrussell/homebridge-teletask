@@ -231,6 +231,10 @@ class TeletaskPlatform {
       entry._note = `auto-discovered ${today} — rename, or set "visible": false to ignore`;
       accessories.push(entry);
       added++;
+      this.log.info(
+        `Auto-discover: new ${type} (outputId ${number}) not in config — added as "${entry.name}". ` +
+          `Rename it, or set "visible": false to ignore it.`
+      );
     }
 
     // Flag existing accessories discovery didn't recognise; clear the flag on ones it now sees.
@@ -250,6 +254,12 @@ class TeletaskPlatform {
     }
 
     this.log.info(`Auto-discover: ${found.size} outputs seen; ${added} new added${flagged ? `, ${flagged} flagged` : ""}${cleared ? `, ${cleared} cleared` : ""}.`);
+    if (added) {
+      this.log.info(
+        'Auto-discover is on. To stop it probing and adding outputs, turn off ' +
+          '"Auto-discover outputs on startup" in the Teletask plugin config (autoDiscover: false).'
+      );
+    }
     if (added || flagged || cleared) this._writeConfig();
 
     // Rebuild the active device list from the merged config (visible:false removed).
