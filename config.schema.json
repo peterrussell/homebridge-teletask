@@ -33,6 +33,12 @@
         "maximum": 10,
         "description": "Central unit index (1 = 'A'). Can be overridden per accessory."
       },
+      "autoDiscover": {
+        "title": "Auto-discover outputs on startup",
+        "type": "boolean",
+        "default": false,
+        "description": "Probe the unit at startup and append any newly-found outputs to the config (with generic names). Set \"visible\": false on any you want to ignore. Adds a few seconds to startup."
+      },
       "accessories": {
         "title": "Accessories",
         "type": "array",
@@ -66,6 +72,12 @@
               "type": "integer",
               "required": true,
               "description": "The output number from PROSOFT (GUISOFT > Define Output)."
+            },
+            "visible": {
+              "title": "Visible in HomeKit",
+              "type": "boolean",
+              "default": true,
+              "description": "Set to false to keep this entry in the config but NOT expose it in HomeKit (useful for ignoring auto-discovered outputs you don't want)."
             },
             "centralUnit": {
               "title": "Central unit (optional)",

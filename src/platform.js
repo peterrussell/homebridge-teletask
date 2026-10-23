@@ -4,6 +4,11 @@ const { PLATFORM_NAME, PLUGIN_NAME } = require("./settings.js");
 
 const RECONNECT_MS = 10000;
 
+// Teletask function codes <-> HomeKit type, for auto-discovery.
+const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20 };
+const TYPE_FOR_FN = { 1: "light", 2: "dimmer", 6: "blind", 20: "thermostat" };
+const LABEL_FOR_FN = { 1: "Light", 2: "Dimmer", 6: "Blind", 20: "Zone" };
+
 // Dynamic Homebridge platform that bridges TELETASK DoIP devices into HomeKit.
 class TeletaskPlatform {
   constructor(log, config, api) {
@@ -40,7 +45,7 @@ class TeletaskPlatform {
     const defaultCU = Number(this.config.centralUnit ?? 1);
     const list = Array.isArray(this.config.accessories) ? this.config.accessories : [];
     return list
-      .filter((a) => a && a.type && a.number !== undefined)
+      .filter((a) => a && a.type && a.number !== undefined && a.visible !== false)
       .map((a) => {
         const type = String(a.type).trim().toLowerCase();
         const centralUnit = Number(a.centralUnit ?? defaultCU);
@@ -63,13 +68,22 @@ class TeletaskPlatform {
   }
 
   async _start() {
-    if (!this.devices.length) {
-      this.log.warn("No accessories configured — add some in the plugin settings.");
-    }
-
     // teletask-api is ESM; load it here (async context) from this CommonJS module.
     // The library is vendored into ./lib at build time (see scripts/bundle-lib.mjs).
     const { TeletaskClient } = await import("../lib/teletask-api/index.js");
+
+    // Optionally probe the unit and merge any newly-found outputs into the config.
+    if (this.config.autoDiscover) {
+      try {
+        await this._autoDiscoverMerge();
+      } catch (e) {
+        this.log.warn(`Auto-discover failed: ${e?.message ?? e}`);
+      }
+    }
+
+    if (!this.devices.length) {
+      this.log.warn("No accessories configured — add some in the plugin settings.");
+    }
 
     // Register the devices with the client so state reports carry deviceId.
     this.client = new TeletaskClient({
@@ -127,6 +141,140 @@ class TeletaskPlatform {
   _shutdown() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.client?.disconnect().catch(() => {});
+  }
+
+  // Probe the unit over DoIP and return a Map "fn:number" -> { fn, number, state }.
+  async _discover() {
+    const net = require("node:net");
+    const { parseIncoming, encodeKeepAlive, encodeFunctionGet, encodeAck } = await import("../lib/teletask-api/index.js");
+    const host = this.config.host;
+    const port = Number(this.config.port ?? 55957);
+    const cu = Number(this.config.centralUnit ?? 1);
+    const probes = [[1, 32], [2, 16], [6, 16], [20, 24]]; // relay, dimmer, motor, sensor
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    return new Promise((resolve) => {
+      const found = new Map();
+      let buf = Buffer.alloc(0);
+      let done = false;
+      const s = net.createConnection({ host, port });
+      const finish = () => { if (done) return; done = true; try { s.destroy(); } catch {} resolve(found); };
+      s.on("data", (d) => {
+        buf = Buffer.concat([buf, d]);
+        const { frames, remaining } = parseIncoming(buf);
+        buf = remaining;
+        for (const f of frames) {
+          if (f.type !== "frame") continue;
+          try { s.write(encodeAck()); } catch {}
+          if (f.command === 0x10) {
+            const p = f.parameters;
+            found.set(`${p[1]}:${(p[2] << 8) | p[3]}`, { fn: p[1], number: (p[2] << 8) | p[3], state: p.subarray(5) });
+          }
+        }
+      });
+      s.on("error", (e) => { this.log.debug(`discovery socket: ${e?.message ?? e}`); finish(); });
+      s.on("close", finish);
+      s.on("connect", async () => {
+        try {
+          s.write(encodeKeepAlive());
+          await sleep(400);
+          for (const [fn, max] of probes) {
+            for (let n = 1; n <= max; n++) {
+              s.write(encodeFunctionGet({ centralUnit: cu, functionCode: fn, number: n }));
+              await sleep(110);
+            }
+          }
+          await sleep(1000);
+        } catch {}
+        try { s.end(); } catch {}
+      });
+      setTimeout(finish, 30000); // safety net
+    });
+  }
+
+  // Discover outputs, append any new ones to the config, flag unrecognised ones, and
+  // persist the merged config.json. Respects visible:false (kept, but skipped in HomeKit).
+  async _autoDiscoverMerge() {
+    this.log.info("Auto-discover: probing the central unit for outputs…");
+    const found = await this._discover();
+    if (!found.size) {
+      this.log.warn("Auto-discover: nothing responded (needs the TDS15132 license on port 55957); leaving config as-is.");
+      return;
+    }
+
+    if (!Array.isArray(this.config.accessories)) this.config.accessories = [];
+    const accessories = this.config.accessories;
+    const today = new Date().toISOString().slice(0, 10);
+    const temp2 = (st) => (st.length < 2 ? null : ((st[0] << 8) | st[1]) / 10 - 273);
+
+    // Everything already referenced by the config (accessory, powerRelay, temperatureFrom).
+    const used = new Set();
+    for (const a of accessories) {
+      const fn = FN_FOR_TYPE[String(a.type ?? "").toLowerCase()];
+      if (fn) used.add(`${fn}:${Number(a.number)}`);
+      if (a.powerRelay != null) used.add(`1:${Number(a.powerRelay)}`);
+      if (a.temperatureFrom != null) used.add(`20:${Number(a.temperatureFrom)}`);
+    }
+
+    // New outputs -> append at the bottom.
+    let added = 0;
+    for (const { fn, number, state } of [...found.values()].sort((a, b) => a.fn - b.fn || a.number - b.number)) {
+      if (used.has(`${fn}:${number}`)) continue;
+      const type = TYPE_FOR_FN[fn] ?? "switch";
+      const entry = { name: `${LABEL_FOR_FN[fn] ?? "Device"} ${number}`, type, number };
+      if (type === "blind") entry.invertPosition = true;
+      if (type === "thermostat") {
+        const t = temp2(state);
+        entry.climate = t !== null && t > -50 && t < 80 ? "heat" : "auto";
+      }
+      entry._note = `auto-discovered ${today} — rename, or set "visible": false to ignore`;
+      accessories.push(entry);
+      added++;
+    }
+
+    // Flag existing accessories discovery didn't recognise; clear the flag on ones it now sees.
+    let flagged = 0;
+    let cleared = 0;
+    for (const a of accessories) {
+      const fn = FN_FOR_TYPE[String(a.type ?? "").toLowerCase()];
+      if (!fn) continue;
+      const seen = found.has(`${fn}:${Number(a.number)}`);
+      if (!seen && !a._discoveryNote && a._note == null) {
+        a._discoveryNote = `not seen by discovery ${today} — this number may be unconfigured on the unit`;
+        flagged++;
+      } else if (seen && a._discoveryNote) {
+        delete a._discoveryNote;
+        cleared++;
+      }
+    }
+
+    this.log.info(`Auto-discover: ${found.size} outputs seen; ${added} new added${flagged ? `, ${flagged} flagged` : ""}${cleared ? `, ${cleared} cleared` : ""}.`);
+    if (added || flagged || cleared) this._writeConfig();
+
+    // Rebuild the active device list from the merged config (visible:false removed).
+    this.devices = this._buildDevices();
+  }
+
+  // Write the merged accessories back into config.json (our platform block only).
+  _writeConfig() {
+    try {
+      const fs = require("node:fs");
+      const configPath = this.api.user.configPath();
+      const json = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const platforms = Array.isArray(json.platforms) ? json.platforms : [];
+      const block = platforms.find(
+        (p) => p && p.platform === PLATFORM_NAME && (p.name ?? "Teletask") === (this.config.name ?? "Teletask")
+      );
+      if (!block) {
+        this.log.warn("Auto-discover: could not find the Teletask platform in config.json; not saving.");
+        return;
+      }
+      block.accessories = this.config.accessories;
+      fs.writeFileSync(configPath, JSON.stringify(json, null, 4) + "\n");
+      this.log.info("Auto-discover: config.json updated.");
+    } catch (e) {
+      this.log.warn(`Auto-discover: could not update config.json: ${e?.message ?? e}`);
+    }
   }
 
   _ensureAccessory(device) {
