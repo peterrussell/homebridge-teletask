@@ -259,6 +259,11 @@ class TeletaskPlatform {
         'Auto-discover is on. To stop it probing and adding outputs, turn off ' +
           '"Auto-discover outputs on startup" in the Teletask plugin config (autoDiscover: false).'
       );
+    } else {
+      this.log.info(
+        'Auto-discover: no new outputs. You can turn off discovery in the plugin config ' +
+          '("Auto-discover outputs on startup" / autoDiscover: false).'
+      );
     }
     if (added || flagged || cleared) this._writeConfig();
 
