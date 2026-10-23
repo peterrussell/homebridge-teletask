@@ -36,8 +36,8 @@
       "autoDiscover": {
         "title": "Auto-discover outputs on startup",
         "type": "boolean",
-        "default": false,
-        "description": "Probe the unit at startup and append any newly-found outputs to the config (with generic names). Set \"visible\": false on any you want to ignore. Adds a few seconds to startup."
+        "default": true,
+        "description": "On by default: probe the unit at startup and append any newly-found outputs to the config (with generic names). Set \"visible\": false on any you want to ignore. Set this to false to disable discovery entirely. Adds a few seconds to startup."
       },
       "accessories": {
         "title": "Accessories",

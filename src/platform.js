@@ -72,8 +72,9 @@ class TeletaskPlatform {
     // The library is vendored into ./lib at build time (see scripts/bundle-lib.mjs).
     const { TeletaskClient } = await import("../lib/teletask-api/index.js");
 
-    // Optionally probe the unit and merge any newly-found outputs into the config.
-    if (this.config.autoDiscover) {
+    // Probe the unit and merge any newly-found outputs into the config. On by default;
+    // disable by setting "autoDiscover": false.
+    if (this.config.autoDiscover !== false) {
       try {
         await this._autoDiscoverMerge();
       } catch (e) {

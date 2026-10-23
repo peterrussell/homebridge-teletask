@@ -1,100 +1,72 @@
 # homebridge-teletask
 
-A [Homebridge](https://homebridge.io) plugin that bridges **TELETASK DoIP** devices — relays
-(lights/switches/fans/outlets), dimmers, blinds/motors and sensors — into Apple **HomeKit**,
-using the local [`teletask-api`](../) library.
+Bridge a **TELETASK** DoIP home‑automation system into Apple **HomeKit** via
+[Homebridge](https://homebridge.io) — lights, dimmers, blinds, fans, underfloor heating and
+air‑conditioning, all controllable from the Home app and Siri.
 
-## ⚠️ Requires a TDS15132 license
+> ⚠️ **Requires a TELETASK "DoIP Open Protocol" (TDS15132) licence** active on your central
+> unit. Without it the plugin loads but can't control anything. A free 3‑day trial is
+> available — see **[PROSOFT & licensing](docs/prosoft-and-licensing.md)**.
 
-Like any third-party TELETASK integration, this plugin talks to the central unit's **DoIP Open
-Protocol on TCP port 55957**, which is **license-gated**: the unit ignores commands until a
-`TDS15132` (DoIP Open Protocol) license is active (a 3-day trial opens after a PROSOFT config
-download; permanent use needs the license `.act` imported in PROSOFT). The plugin will still
-load and expose accessories without it, but switching anything won't take effect until the
-license is active. See the [library README](../README.md#️-important-local-control-requires-a-tds15132-license)
-for the full picture.
+---
 
-## Install
+## Quick start
 
-From the Homebridge UI, search for **Teletask** — or manually:
+1. **Enable the DoIP Open Protocol** on your central unit (licence or 3‑day trial) →
+   **[PROSOFT & licensing](docs/prosoft-and-licensing.md)**.
+2. **Install** the plugin → **[Installation](docs/installation.md)**.
+3. **Add the platform** to your Homebridge config (UI → *Config*, or `config.json`):
+   ```json
+   {
+     "platform": "Teletask",
+     "name": "Teletask",
+     "host": "192.168.1.50",
+     "port": 55957
+   }
+   ```
+   Use your central unit's IP for `host`. That's the whole minimum config.
+4. **Restart Homebridge.** Auto‑discovery is on by default, so every output on the unit
+   appears in HomeKit automatically with generic names (`Light 1`, `Blind 3`, `Zone 4`…).
+5. **Tidy up:** rename accessories, and set `"visible": false` on any you don't want. New
+   outputs you add in PROSOFT later just appear at the bottom of your config next restart.
 
-```bash
-# in this repo (installs the local teletask-api dependency too)
-cd homebridge-teletask
-npm install
-# then point Homebridge at this folder, or `npm link` it
-```
+That's it. For anything beyond on/off — dimmer ranges, blinds, thermostats, pairing relays —
+see the docs below.
 
-## Configuration
+---
 
-Add a platform block to your Homebridge `config.json` (or use the settings UI, which reads
-`config.schema.json`):
+## What it supports
 
-```json
-{
-  "platforms": [
-    {
-      "platform": "Teletask",
-      "name": "Teletask",
-      "host": "192.168.1.113",
-      "port": 55957,
-      "centralUnit": 1,
-      "accessories": [
-        { "name": "Main Hall",     "type": "light", "number": 1 },
-        { "name": "Hall Bedroom",  "type": "light", "number": 2 },
-        { "name": "Bathroom",      "type": "light", "number": 3 },
-        { "name": "Bathroom Fan",  "type": "fan",   "number": 4 },
-        { "name": "Master Suite",  "type": "light", "number": 5 },
-        { "name": "Master Bath",   "type": "light", "number": 6 },
-        { "name": "Master Fan",    "type": "fan",   "number": 7 },
-        { "name": "Back Bedroom",  "type": "light", "number": 8 }
-      ]
-    }
-  ]
-}
-```
+| HomeKit | TELETASK | Notes |
+|---|---|---|
+| Lightbulb / Switch / Fan / Outlet | relay output | pick the `type` that suits |
+| Lightbulb + brightness | dimmer | brightness‑range mapping; optional relay for a true off |
+| Window Covering | motor | position + open/close |
+| Thermostat | climate / sensor zone | heating **and** air‑conditioning, with setpoint & modes |
 
-The example above mirrors the 8 built-in relay outputs of a PICOS as defined in PROSOFT
-(outputs 4 and 7 are "Ventax" ventilation fans, so they're mapped as `fan`). Use your own
-project's **Define Output** screen to read the output numbers.
+---
 
-### Accessory options
+## Documentation
 
-| Field | Required | Notes |
-|-------|----------|-------|
-| `name` | yes | HomeKit name |
-| `type` | yes | `light`, `switch`, `fan`, `outlet`, `dimmer`, `blind`, `thermostat`, `sensor` |
-| `number` | yes | output/function number from PROSOFT |
-| `centralUnit` | no | overrides the platform default (1) |
-| `invertPosition` | no | blinds only — flip if open/closed is reversed |
+- **[Installation & updates](docs/installation.md)** — install it and keep it updated.
+- **[PROSOFT & licensing](docs/prosoft-and-licensing.md)** — the TDS15132 licence, the 3‑day
+  trial, and how the DoIP ports work.
+- **[Configuration reference](docs/configuration.md)** — every platform and accessory option.
+- **[Accessory types](docs/accessory-types.md)** — lights, dimmers, blinds, thermostats and
+  their options, with examples.
+- **[Auto‑discovery](docs/auto-discovery.md)** — how outputs appear automatically and how to
+  ignore the ones you don't want.
 
-### Type → HomeKit mapping
+---
 
-| `type` | TELETASK function | HomeKit service |
-|--------|-------------------|-----------------|
-| `light` | relay | Lightbulb |
-| `switch` | relay | Switch |
-| `fan` | relay | Fan |
-| `outlet` | relay | Outlet |
-| `dimmer` | dimmer | Lightbulb + Brightness |
-| `blind` | motor | Window Covering |
-| `thermostat` | sensor/climate | Thermostat *(experimental)* |
-| `sensor` | sensor | Temperature Sensor |
+## How it works (in one paragraph)
 
-## How it works
+The plugin opens a TCP connection to your central unit and speaks TELETASK's **DoIP Open
+Protocol** (the same protocol the official SDK uses). It reads device state, sends control
+commands, and keeps the connection alive, mapping each TELETASK output onto a standard HomeKit
+accessory. It needs no cloud — everything is local to your network.
 
-On launch the plugin connects to the central unit with `teletask-api`, registers one HomeKit
-accessory per configured device, and subscribes to state changes. HomeKit actions (on/off,
-brightness, blind position, setpoint) are translated to DoIP `Device Set` commands; pushed
-state reports update the matching HomeKit characteristics in real time. It keeps the socket
-alive and reconnects automatically if the connection drops.
+## License
 
-## Caveats
-
-- **Blinds** use position passthrough by default; if open/closed looks reversed, set
-  `invertPosition: true`. Motors without position feedback report limited state.
-- **Thermostat/sensor** support is experimental — the sensor/climate value format differs
-  between protocol generations (2-byte legacy vs IEEE-754 float). Verify against your unit.
-- Well-exercised paths are lights, switches, fans, outlets and dimmers (relay/dimmer).
-
-MIT.
+MIT. This is an independent, interoperability‑focused project and is not affiliated with or
+endorsed by TELETASK.
