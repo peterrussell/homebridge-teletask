@@ -23,21 +23,19 @@
         "title": "Port",
         "type": "integer",
         "default": 55957,
-        "description": "DoIP Open Protocol port. Leave at 55957 unless you changed it in PROSOFT."
+        "description": "DoIP port — leave at 55957 unless you changed it in PROSOFT."
       },
       "centralUnit": {
         "title": "Default central unit",
         "type": "integer",
         "default": 1,
-        "minimum": 1,
-        "maximum": 10,
-        "description": "Central unit index (1 = 'A'). Can be overridden per accessory."
+        "description": "Central unit index (1 = 'A')."
       },
       "autoDiscover": {
         "title": "Auto-discover outputs on startup",
         "type": "boolean",
         "default": true,
-        "description": "On by default: probe the unit at startup and append any newly-found outputs to the config (with generic names). Set \"visible\": false on any you want to ignore. Set this to false to disable discovery entirely. Adds a few seconds to startup."
+        "description": "Probe the unit at startup and add any new outputs. Uncheck to disable."
       },
       "accessories": {
         "title": "Accessories",
@@ -68,29 +66,27 @@
               "required": true
             },
             "outputId": {
-              "title": "Output / function number",
+              "title": "Output #",
               "type": "integer",
               "required": true,
-              "description": "The output number from PROSOFT (GUISOFT > Define Output). (The old key \"number\" is still accepted.)"
+              "description": "Output number from PROSOFT (GUISOFT → Define Output)."
             },
             "visible": {
               "title": "Visible in HomeKit",
               "type": "boolean",
               "default": true,
-              "description": "Set to false to keep this entry in the config but NOT expose it in HomeKit (useful for ignoring auto-discovered outputs you don't want)."
+              "description": "Uncheck to keep in config but hide from HomeKit."
             },
             "centralUnit": {
               "title": "Central unit (optional)",
               "type": "integer",
-              "minimum": 1,
-              "maximum": 10,
               "description": "Overrides the default central unit for this accessory."
             },
             "invertPosition": {
               "title": "Invert blind position",
               "type": "boolean",
               "default": false,
-              "description": "Blinds only: flip if HomeKit open/closed is reversed."
+              "description": "Flip if open/closed is reversed."
             },
             "climate": {
               "title": "Climate mode",
@@ -101,27 +97,27 @@
                 { "title": "Cool only (AC)", "enum": ["cool"] },
                 { "title": "Heat + Cool + Auto", "enum": ["auto"] }
               ],
-              "description": "Limits HomeKit to the modes the zone supports."
+              "description": "Modes the zone supports."
             },
             "temperatureFrom": {
               "title": "Borrow temperature from zone",
               "type": "integer",
-              "description": "For a zone with no temperature of its own (e.g. AC): sensor-zone number to read the current temperature from instead."
+              "description": "Read temperature from another zone (for AC with no sensor of its own)."
             },
             "powerRelay": {
               "title": "On/off via relay",
               "type": "integer",
-              "description": "Relay output number to use for on/off — for a thermostat (underfloor circuit) or a dimmer that needs a relay to fully switch off."
+              "description": "Relay output used for true on/off."
             },
             "minBrightness": {
-              "title": "Dimmer: level for HomeKit 1% (lowest usable)",
+              "title": "Min level (HomeKit 1%)",
               "type": "integer",
-              "description": "The Teletask level (0-100) the light reaches at HomeKit 1%. Maps the slider's low end to the light's real floor."
+              "description": "Teletask level (0-100) at HomeKit 1%."
             },
             "maxBrightness": {
-              "title": "Dimmer: level for HomeKit 100% (full)",
+              "title": "Max level (HomeKit 100%)",
               "type": "integer",
-              "description": "The Teletask level (0-100) that gives full brightness (e.g. 75 if the light stops getting brighter above 75%)."
+              "description": "Teletask level (0-100) at HomeKit 100% (e.g. 75)."
             }
           }
         }
@@ -131,8 +127,11 @@
   "layout": [
     "name",
     "host",
-    "port",
-    "centralUnit",
+    {
+      "type": "flex",
+      "flex-flow": "row wrap",
+      "items": ["port", "centralUnit"]
+    },
     "autoDiscover",
     {
       "key": "accessories",
@@ -142,10 +141,12 @@
       "expanded": false,
       "items": [
         "accessories[].name",
-        "accessories[].type",
-        "accessories[].outputId",
+        {
+          "type": "flex",
+          "flex-flow": "row wrap",
+          "items": ["accessories[].type", "accessories[].outputId"]
+        },
         "accessories[].visible",
-        "accessories[].centralUnit",
         {
           "key": "accessories[].invertPosition",
           "condition": {
@@ -153,22 +154,12 @@
           }
         },
         {
-          "key": "accessories[].minBrightness",
+          "type": "flex",
+          "flex-flow": "row wrap",
           "condition": {
             "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && a.type === 'dimmer';"
-          }
-        },
-        {
-          "key": "accessories[].maxBrightness",
-          "condition": {
-            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && a.type === 'dimmer';"
-          }
-        },
-        {
-          "key": "accessories[].powerRelay",
-          "condition": {
-            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'dimmer' || a.type === 'thermostat' || a.type === 'heating');"
-          }
+          },
+          "items": ["accessories[].minBrightness", "accessories[].maxBrightness"]
         },
         {
           "key": "accessories[].climate",
@@ -180,6 +171,12 @@
           "key": "accessories[].temperatureFrom",
           "condition": {
             "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'thermostat' || a.type === 'heating');"
+          }
+        },
+        {
+          "key": "accessories[].powerRelay",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'dimmer' || a.type === 'thermostat' || a.type === 'heating');"
           }
         }
       ]
