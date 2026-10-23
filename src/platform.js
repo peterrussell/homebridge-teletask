@@ -69,8 +69,8 @@ class TeletaskPlatform {
 
   async _start() {
     // teletask-api is ESM; load it here (async context) from this CommonJS module.
-    // The library is vendored into ./lib at build time (see scripts/bundle-lib.mjs).
-    const { TeletaskClient } = await import("../lib/teletask-api/index.js");
+    // It's a pinned git dependency (see package.json), resolved from node_modules.
+    const { TeletaskClient } = await import("teletask-api");
 
     // Probe the unit and merge any newly-found outputs into the config. On by default;
     // disable by setting "autoDiscover": false.
@@ -147,7 +147,7 @@ class TeletaskPlatform {
   // Probe the unit over DoIP and return a Map "fn:number" -> { fn, number, state }.
   async _discover() {
     const net = require("node:net");
-    const { parseIncoming, encodeKeepAlive, encodeFunctionGet, encodeAck } = await import("../lib/teletask-api/index.js");
+    const { parseIncoming, encodeKeepAlive, encodeFunctionGet, encodeAck } = await import("teletask-api");
     const host = this.config.host;
     const port = Number(this.config.port ?? 55957);
     const cu = Number(this.config.centralUnit ?? 1);
