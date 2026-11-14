@@ -151,7 +151,9 @@ class TeletaskPlatform {
     // exposed to HomeKit (HAP), Matter, or both; everything else is HomeKit only.
     for (const device of this.devices) {
       if (exposesHomeKit(device.expose)) this._ensureAccessory(device);
-      if (exposesMatter(device.expose)) await this._ensureMatterAccessory(device);
+      // Matter registration self-retries until the bridge's Matter server is up, so
+      // run it in the background rather than blocking HAP setup and the unit connect.
+      if (exposesMatter(device.expose)) this._ensureMatterAccessory(device);
     }
     this._removeStaleAccessories();
 
@@ -375,7 +377,14 @@ class TeletaskPlatform {
   async _ensureMatterAccessory(device) {
     try {
       const entry = await registerTeletaskMatterAircon(this, device);
-      if (entry) this.matterDevices.set(device.id, entry);
+      if (entry) {
+        this.matterDevices.set(device.id, entry);
+        try {
+          entry.push(); // seed clusters from the (possibly already-primed) cache
+        } catch (err) {
+          this.log.debug(`Initial Matter push for ${device.name} failed: ${err?.message ?? err}`);
+        }
+      }
     } catch (err) {
       this.log.error(`[${device.name}] Failed to publish Matter air-conditioner: ${err?.message ?? err}`);
     }

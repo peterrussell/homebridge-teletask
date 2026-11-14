@@ -35,6 +35,29 @@ function matterAvailable(api) {
   return Boolean(api && api.matter && typeof api.isMatterEnabled === "function" && api.isMatterEnabled());
 }
 
+// A RoomAirConditioner is a *bridged* Matter accessory, so it can only be
+// registered once this bridge's Matter server has finished starting — which
+// happens a moment AFTER didFinishLaunching fires. Homebridge rejects an early
+// call with a transient "server is still starting" error, so retry on that (and
+// only that) with backoff; any other error is real and rethrown immediately.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isTransientMatterError = (err) =>
+  /still starting|not started|finished launching/i.test(String(err?.message ?? err));
+
+async function registerWithRetry(matter, accessory, log, name) {
+  const delays = [500, 1000, 2000, 3000, 5000, 5000, 8000, 10000]; // ~35s of attempts
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await matter.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      return;
+    } catch (err) {
+      if (!isTransientMatterError(err) || attempt >= delays.length) throw err;
+      log.debug(`[${name}] Matter server still starting; retrying in ${delays[attempt]}ms…`);
+      await sleep(delays[attempt]);
+    }
+  }
+}
+
 // Register one zone as a Matter Room Air Conditioner.
 //   platform : the TeletaskPlatform instance (for api, log, client, _fire)
 //   device   : the normalised device definition
@@ -181,7 +204,7 @@ async function registerTeletaskMatterAircon(platform, device) {
     }
   };
 
-  await matter.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+  await registerWithRetry(matter, accessory, log, device.name);
   log.info(`[${device.name}] Published native Matter Room Air Conditioner (zone ${device.number}).`);
 
   return { uuid, device, push };
