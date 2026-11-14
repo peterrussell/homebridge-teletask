@@ -37,6 +37,17 @@
         "default": true,
         "description": "Probe the unit at startup and add any new outputs. Uncheck to disable."
       },
+      "defaultExpose": {
+        "title": "Default Climate Exposure",
+        "type": "string",
+        "default": "homekit",
+        "oneOf": [
+          { "title": "HomeKit Thermostat", "enum": ["homekit"] },
+          { "title": "Matter Room Air Conditioner", "enum": ["matter"] },
+          { "title": "Both", "enum": ["both"] }
+        ],
+        "description": "How climate zones are exposed unless overridden per zone. Matter needs Matter enabled on this (child) bridge and a separate pairing — see the README."
+      },
       "accessories": {
         "title": "Accessories",
         "type": "array",
@@ -99,6 +110,16 @@
               ],
               "description": "Modes the zone supports."
             },
+            "expose": {
+              "title": "Expose As",
+              "type": "string",
+              "oneOf": [
+                { "title": "HomeKit Thermostat", "enum": ["homekit"] },
+                { "title": "Matter Room Air Conditioner", "enum": ["matter"] },
+                { "title": "Both", "enum": ["both"] }
+              ],
+              "description": "HomeKit thermostat, a native Matter air-conditioner, or both. Leave unset to use the platform default. Matter needs Matter enabled on this (child) bridge and a separate pairing."
+            },
             "temperatureFrom": {
               "title": "Borrow Temperature From Zone",
               "type": "integer",
@@ -136,6 +157,7 @@
       "items": ["host", "port"]
     },
     "autoDiscover",
+    "defaultExpose",
     {
       "key": "accessories",
       "type": "array",
@@ -166,6 +188,12 @@
         },
         {
           "key": "accessories[].climate",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'thermostat' || a.type === 'heating');"
+          }
+        },
+        {
+          "key": "accessories[].expose",
           "condition": {
             "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'thermostat' || a.type === 'heating');"
           }

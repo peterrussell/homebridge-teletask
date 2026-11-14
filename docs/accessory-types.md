@@ -52,8 +52,10 @@ setpoint and mode.
 { "name": "Living Room Aircon",  "type": "thermostat", "outputId": 9, "climate": "auto", "temperatureFrom": 3 }
 ```
 
-- **`climate`** — restricts the modes HomeKit offers: `heat` (radiators/underfloor), `cool`
+- **`climate`** — restricts the modes offered: `heat` (radiators/underfloor), `cool`
   (cooling only), or `auto` (heat + cool + auto, e.g. reverse‑cycle AC).
+- **`expose`** — `homekit` (default, a HomeKit Thermostat), `matter` (a native Matter Room Air
+  Conditioner), or `both`. See **[Matter air‑conditioning](matter.md)**.
 - **`temperatureFrom`** — some AC zones report no temperature of their own. Point this at a
   sensor zone in the same room (e.g. the radiator zone) and the thermostat borrows that
   reading.

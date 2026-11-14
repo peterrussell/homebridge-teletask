@@ -1,8 +1,26 @@
 // CommonJS plugin. teletask-api is an ES module, so it's loaded lazily via dynamic
 // import() inside _start() (which runs async on didFinishLaunching).
 const { PLATFORM_NAME, PLUGIN_NAME } = require("./settings.js");
+const { makeClimateControl } = require("./climate-core.js");
+const { registerTeletaskMatterAircon } = require("./matter-aircon.js");
 
 const RECONNECT_MS = 10000;
+
+// Accessory types that are climate zones (can be a HomeKit Thermostat and/or a
+// native Matter Room Air Conditioner).
+const CLIMATE_TYPES = new Set(["thermostat", "heating"]);
+
+// Normalise the per-accessory (or platform default) `expose` option.
+// "homekit" (default) = HomeKit Thermostat; "matter" = native Matter Room AC;
+// "both" = both. Only meaningful for climate zones.
+function normalizeExpose(value, fallback) {
+  const v = String(value ?? fallback ?? "homekit").trim().toLowerCase();
+  if (v === "matter" || v === "both" || v === "homekit") return v;
+  if (v === "hap" || v === "homekit-only") return "homekit";
+  return "homekit";
+}
+const exposesHomeKit = (e) => e === "homekit" || e === "both";
+const exposesMatter = (e) => e === "matter" || e === "both";
 
 // Teletask function codes <-> HomeKit type, for auto-discovery.
 const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20 };
@@ -35,8 +53,10 @@ class TeletaskPlatform {
 
     // uuid -> restored PlatformAccessory (from disk cache)
     this.cachedAccessories = new Map();
-    // deviceId -> { accessory, device, update(state) }
+    // deviceId -> { accessory, device, update(state) }  (HomeKit/HAP accessories)
     this.handlers = new Map();
+    // deviceId -> { uuid, device, push() }  (native Matter accessories)
+    this.matterDevices = new Map();
     this.client = null;
     this.reconnectTimer = null;
 
@@ -66,12 +86,18 @@ class TeletaskPlatform {
         const centralUnit = Number(a.centralUnit ?? defaultCU);
         const number = Number(a.outputId ?? a.number); // "number" accepted as a legacy alias
         const id = a.id ?? `${type}-cu${centralUnit}-n${number}`;
+        // Climate zones can be exposed to HomeKit, Matter, or both; everything else
+        // is HomeKit only.
+        const expose = CLIMATE_TYPES.has(type)
+          ? normalizeExpose(a.expose, this.config.defaultExpose)
+          : "homekit";
         return {
           id,
           type,
           centralUnit,
           number,
           name: a.name ?? id,
+          expose,
           invertPosition: Boolean(a.invertPosition),
           climate: a.climate ? String(a.climate).toLowerCase() : "auto",
           temperatureFrom: a.temperatureFrom != null ? Number(a.temperatureFrom) : null,
@@ -121,8 +147,12 @@ class TeletaskPlatform {
       this._scheduleReconnect();
     });
 
-    // Build/restore HomeKit accessories regardless of connection state.
-    for (const device of this.devices) this._ensureAccessory(device);
+    // Build/restore accessories regardless of connection state. Climate zones can be
+    // exposed to HomeKit (HAP), Matter, or both; everything else is HomeKit only.
+    for (const device of this.devices) {
+      if (exposesHomeKit(device.expose)) this._ensureAccessory(device);
+      if (exposesMatter(device.expose)) await this._ensureMatterAccessory(device);
+    }
     this._removeStaleAccessories();
 
     await this._connect();
@@ -138,6 +168,14 @@ class TeletaskPlatform {
           await this.client.getState(device.id);
         } catch (err) {
           this.log.debug(`Initial getState for ${device.name} failed: ${err?.message ?? err}`);
+        }
+      }
+      // Matter is push-only, so seed its clusters from the primed cache.
+      for (const m of this.matterDevices.values()) {
+        try {
+          m.push();
+        } catch (err) {
+          this.log.debug(`Initial Matter push for ${m.device.name} failed: ${err?.message ?? err}`);
         }
       }
     } catch (err) {
@@ -331,6 +369,18 @@ class TeletaskPlatform {
     this._setupService(accessory, device);
   }
 
+  // Publish a climate zone as a native Matter Room Air Conditioner (opt-in via
+  // `expose`). Matter accessories live outside the HAP bridge, so this does not
+  // touch cachedAccessories / _removeStaleAccessories.
+  async _ensureMatterAccessory(device) {
+    try {
+      const entry = await registerTeletaskMatterAircon(this, device);
+      if (entry) this.matterDevices.set(device.id, entry);
+    } catch (err) {
+      this.log.error(`[${device.name}] Failed to publish Matter air-conditioner: ${err?.message ?? err}`);
+    }
+  }
+
   _setupInformation(accessory, device) {
     const info =
       accessory.getService(this.Service.AccessoryInformation) ||
@@ -466,59 +516,41 @@ class TeletaskPlatform {
           : [T.OFF, T.HEAT, T.COOL, T.AUTO];
         service.getCharacteristic(T).setProps({ validValues: valid });
 
-        const clamp = (t) => Math.max(5, Math.min(35, t));
-        // Power/on-off: by default via the zone's SET_TEMPONOFF toggle; if "powerRelay" is
-        // set, use that relay output instead (reliable on/off for underfloor/radiator).
-        const relayTarget = device.powerRelay != null
-          ? { centralUnit: device.centralUnit, functionCode: 1, number: device.powerRelay }
-          : null;
-        const isOn = () =>
-          relayTarget ? Boolean(this.client.getCachedState(relayTarget)?.normalized?.on)
-                      : Boolean(cached()?.on);
-        const setPower = async (on) => {
-          if (relayTarget) { await client.setLightPower(relayTarget, on); return; }
-          if (Boolean(cached()?.on) !== on) await client.toggleHeatingPower(device.id); // SET_TEMPONOFF toggle
-        };
-        // Teletask mode byte: 94=Auto, 95=Heat, 96=Cool. Derive the real heat/cool state.
-        const cooling = (n) => n?.mode === 96 || (device.climate === "cool" && n?.mode !== 95);
+        // Power / mode / target / temperature semantics are shared with the Matter
+        // Room Air Conditioner front-end (climate-core.js), so the two never diverge.
+        const ctl = makeClimateControl({ client, device });
+
         const activeState = (n) =>
-          !isOn() ? C.CurrentHeatingCoolingState.OFF
-          : cooling(n) ? C.CurrentHeatingCoolingState.COOL
+          !ctl.isOn() ? C.CurrentHeatingCoolingState.OFF
+          : ctl.isCooling(n) ? C.CurrentHeatingCoolingState.COOL
           : C.CurrentHeatingCoolingState.HEAT;
         const targetState = (n) => {
-          if (!isOn()) return T.OFF;
-          if (device.climate === "heat") return T.HEAT;
-          if (device.climate === "cool") return T.COOL;
-          if (n?.mode === 94) return T.AUTO;
-          return n?.mode === 96 ? T.COOL : T.HEAT;
+          switch (ctl.currentMode(n)) {
+            case "off": return T.OFF;
+            case "heat": return T.HEAT;
+            case "cool": return T.COOL;
+            default: return T.AUTO;
+          }
         };
 
-        // Some AC zones report no temperature of their own; borrow it from a co-located
-        // sensor zone (same room) via "temperatureFrom".
-        const tempSource = device.temperatureFrom
-          ? () => this.client.getCachedState({ centralUnit: device.centralUnit, functionCode: 20, number: device.temperatureFrom })?.normalized ?? null
-          : cached;
-        const readTemp = () => { const v = tempSource()?.valueCelsius; return typeof v === "number" ? v : 20; };
-        service.getCharacteristic(C.CurrentTemperature).onGet(readTemp);
+        service.getCharacteristic(C.CurrentTemperature).onGet(() => ctl.readTemp());
         service.getCharacteristic(C.TargetTemperature)
-          .onGet(() => { const t = cached()?.targetCelsius; return typeof t === "number" ? clamp(t) : 20; })
-          .onSet((value) => this._fire(device.name, () => client.setHeatingTargetTemperature(device.id, Number(value))));
+          .onGet(() => ctl.readTarget())
+          .onSet((value) => this._fire(device.name, () => ctl.setTarget(Number(value))));
         service.getCharacteristic(T)
           .onGet(() => targetState(cached()))
           .onSet((value) => this._fire(device.name, async () => {
-            if (value === T.OFF) { await setPower(false); return; }
-            await setPower(true);
+            if (value === T.OFF) { await ctl.setPower(false); return; }
+            await ctl.setPower(true);
             // For zone-controlled (AC) thermostats, also set the heat/cool/auto mode.
-            if (!relayTarget) {
-              const mode = { [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
-              await client.setHeatingMode(device.id, mode);
-            }
+            const mode = { [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
+            await ctl.setMode(mode);
           }));
         service.getCharacteristic(C.CurrentHeatingCoolingState).onGet(() => activeState(cached()));
 
         update = (n) => {
-          service.updateCharacteristic(C.CurrentTemperature, readTemp());
-          if (typeof n?.targetCelsius === "number") service.updateCharacteristic(C.TargetTemperature, clamp(n.targetCelsius));
+          service.updateCharacteristic(C.CurrentTemperature, ctl.readTemp());
+          if (typeof n?.targetCelsius === "number") service.updateCharacteristic(C.TargetTemperature, ctl.clamp(n.targetCelsius));
           service.updateCharacteristic(T, targetState(n));
           service.updateCharacteristic(C.CurrentHeatingCoolingState, activeState(n));
         };
@@ -557,12 +589,34 @@ class TeletaskPlatform {
   }
 
   _onStateChanged(state) {
-    const handler = state.deviceId ? this.handlers.get(state.deviceId) : null;
-    if (!handler) return;
-    try {
-      handler.update(state.normalized);
-    } catch (err) {
-      this.log.debug(`Failed to update ${handler.device.name}: ${err?.message ?? err}`);
+    const id = state.deviceId;
+    if (id) {
+      const handler = this.handlers.get(id);
+      if (handler) {
+        try {
+          handler.update(state.normalized);
+        } catch (err) {
+          this.log.debug(`Failed to update ${handler.device.name}: ${err?.message ?? err}`);
+        }
+      }
+      const matterEntry = this.matterDevices.get(id);
+      if (matterEntry) {
+        try {
+          matterEntry.push();
+        } catch (err) {
+          this.log.debug(`Failed to push Matter state for ${matterEntry.device.name}: ${err?.message ?? err}`);
+        }
+      }
+    }
+    // Matter is push-only: a zone that borrows its temperature from another zone has
+    // to be refreshed on any change, since we can't always match the source's id.
+    for (const [mid, m] of this.matterDevices) {
+      if (mid === id || m.device.temperatureFrom == null) continue;
+      try {
+        m.push();
+      } catch (err) {
+        this.log.debug(`Failed to refresh Matter temp for ${m.device.name}: ${err?.message ?? err}`);
+      }
     }
   }
 

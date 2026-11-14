@@ -43,6 +43,7 @@ see the docs below.
 | Lightbulb + brightness | dimmer | brightness‑range mapping; optional relay for a true off |
 | Window Covering | motor | position + open/close |
 | Thermostat | climate / sensor zone | heating **and** air‑conditioning, with setpoint & modes |
+| Matter Room Air Conditioner | climate / sensor zone | AC zones can instead (or also) be exposed as a native **Matter** air‑conditioner — see **[Matter air‑conditioning](docs/matter.md)** |
 
 ---
 
@@ -54,6 +55,8 @@ see the docs below.
 - **[Configuration reference](docs/configuration.md)** — every platform and accessory option.
 - **[Accessory types](docs/accessory-types.md)** — lights, dimmers, blinds, thermostats and
   their options, with examples.
+- **[Matter air‑conditioning](docs/matter.md)** — expose AC zones as a native Matter Room Air
+  Conditioner (HomeKit and/or Matter, per zone).
 - **[Auto‑discovery](docs/auto-discovery.md)** — how outputs appear automatically and how to
   ignore the ones you don't want.
 
