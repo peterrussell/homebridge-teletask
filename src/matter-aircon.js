@@ -88,19 +88,16 @@ async function registerTeletaskMatterAircon(platform, device) {
       : CSO_COOLING_ONLY;
 
   // Default "on" system mode for this zone (what to show/select when powered on).
-  const onSystemMode = canCool ? SYS_COOL : canHeat ? SYS_HEAT : SYS_AUTO;
+  const onSystemMode = canCool ? SYS_COOL : SYS_HEAT;
 
+  // Homebridge composes this RoomAirConditioner's Thermostat with the Heating and/or
+  // Cooling features but NOT AutoMode, so systemMode must only ever be Off/Cool/Heat.
+  // A TELETASK "auto" zone is reported as whatever it's actually doing right now.
   const systemModeNow = () => {
-    switch (ctl.currentMode()) {
-      case "off":
-        return SYS_OFF;
-      case "cool":
-        return SYS_COOL;
-      case "heat":
-        return SYS_HEAT;
-      default:
-        return SYS_AUTO;
-    }
+    if (!ctl.isOn()) return SYS_OFF;
+    if (canCool && ctl.isCooling()) return SYS_COOL;
+    if (canHeat) return SYS_HEAT;
+    return SYS_COOL;
   };
 
   // The thermostat-cluster attributes that track live state. TELETASK exposes a
@@ -122,11 +119,12 @@ async function registerTeletaskMatterAircon(platform, device) {
       log.debug(`[${device.name}] Matter ${cluster} update failed: ${err?.message ?? err}`);
     });
 
-  // Push current TELETASK state out to the Matter clusters.
+  // Push current TELETASK state out to the Matter clusters. Current temperature is
+  // reported via thermostat.localTemperature — this device type has no separate
+  // TemperatureMeasurement behavior (Homebridge composes only onOff + thermostat).
   const push = () => {
     safeUpdate("onOff", { onOff: ctl.isOn() });
     safeUpdate("thermostat", thermostatState());
-    safeUpdate("temperatureMeasurement", { measuredValue: toCenti(ctl.readTemp()) });
   };
 
   // Fire a control command without blocking the Matter handler on the library's
@@ -145,21 +143,20 @@ async function registerTeletaskMatterAircon(platform, device) {
       onOff: { onOff: ctl.isOn() },
       thermostat: {
         ...thermostatState(),
-        // Setpoint limits (centi-°C) — match the HomeKit thermostat's 5–35 °C range,
-        // with a sensible cooling floor.
-        minCoolSetpointLimit: toCenti(16),
+        // Setpoint limits (centi-°C) span the same 5–35 °C range the control core
+        // clamps to, so every target TELETASK reports is a valid setpoint on BOTH
+        // the heating and cooling sides (a single TELETASK target drives both). A
+        // tighter cooling floor here would reject low targets and spam rollbacks.
+        minCoolSetpointLimit: toCenti(ctl.MIN_C),
         maxCoolSetpointLimit: toCenti(ctl.MAX_C),
-        absMinCoolSetpointLimit: toCenti(16),
+        absMinCoolSetpointLimit: toCenti(ctl.MIN_C),
         absMaxCoolSetpointLimit: toCenti(ctl.MAX_C),
         minHeatSetpointLimit: toCenti(ctl.MIN_C),
-        maxHeatSetpointLimit: toCenti(30),
+        maxHeatSetpointLimit: toCenti(ctl.MAX_C),
         absMinHeatSetpointLimit: toCenti(ctl.MIN_C),
-        absMaxHeatSetpointLimit: toCenti(30)
-      },
-      temperatureMeasurement: {
-        measuredValue: toCenti(ctl.readTemp()),
-        minMeasuredValue: toCenti(-10),
-        maxMeasuredValue: toCenti(50)
+        absMaxHeatSetpointLimit: toCenti(ctl.MAX_C),
+        // Single target ⇒ heating and cooling setpoints are equal; allow that.
+        minSetpointDeadBand: 0
       }
     },
     handlers: {
