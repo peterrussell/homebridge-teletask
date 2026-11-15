@@ -114,6 +114,7 @@
               "title": "Expose As",
               "type": "string",
               "default": "default",
+              "required": true,
               "oneOf": [
                 { "title": "Home Default (use the platform setting)", "enum": ["default"] },
                 { "title": "HomeKit Thermostat", "enum": ["homekit"] },
