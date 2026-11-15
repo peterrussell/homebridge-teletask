@@ -47,9 +47,15 @@ Set `expose` on a climate accessory, or `defaultExpose` on the platform:
 ```
 
 - `climate` still controls which modes the AC offers: `cool` → cooling only,
-  `heat` → heating only, `auto` → heat + cool + auto.
+  `heat` → heating only, `auto` → a heat **and** cool zone.
 - `temperatureFrom` and `powerRelay` work exactly as they do for the HomeKit
   thermostat — the two front‑ends share one control core, so they behave identically.
+
+> **No Auto mode on the Matter AC.** The Matter Room Air Conditioner exposes
+> **Off / Heat / Cool** only. Matter's `RoomAirConditioner` can't carry the AutoMode
+> feature through Homebridge's accessory cache (it errors on every restart), so a
+> heat+cool (`auto`) zone is shown as whatever it's currently running. Use the **HomeKit**
+> thermostat for that zone if you want an Auto mode.
 
 ## Pairing (important)
 
@@ -70,7 +76,7 @@ intended; use it to compare, then settle on one.
 | Matter (Room Air Conditioner) | TELETASK |
 |---|---|
 | On / Off | zone `SET_TEMPONOFF` toggle, or `powerRelay` if set |
-| System mode Cool / Heat / Auto | zone mode (96 / 95 / 94) via `setHeatingMode` |
+| System mode Cool / Heat | zone mode (96 / 95) via `setHeatingMode` (no Auto — see note above) |
 | Cooling / heating setpoint | `setHeatingTargetTemperature` (one target; both setpoints mirror it) |
 | Local / measured temperature | the zone's sensor, or `temperatureFrom` |
 
