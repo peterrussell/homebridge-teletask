@@ -154,9 +154,11 @@ async function registerTeletaskMatterAircon(platform, device) {
         minHeatSetpointLimit: toCenti(ctl.MIN_C),
         maxHeatSetpointLimit: toCenti(ctl.MAX_C),
         absMinHeatSetpointLimit: toCenti(ctl.MIN_C),
-        absMaxHeatSetpointLimit: toCenti(ctl.MAX_C),
-        // Single target ⇒ heating and cooling setpoints are equal; allow that.
-        minSetpointDeadBand: 0
+        absMaxHeatSetpointLimit: toCenti(ctl.MAX_C)
+        // NOTE: do NOT set minSetpointDeadBand — it's a conformance error unless the
+        // AutoMode feature is present, which it isn't here (Heating/Cooling only). It
+        // would crash behavior init and the accessory would fail to register. Without
+        // AutoMode there's no cross-setpoint constraint, so equal setpoints are fine.
       }
     },
     handlers: {
