@@ -23,7 +23,8 @@ Set `expose` on a climate accessory, or `defaultExpose` on the platform:
 
 | Value       | Result |
 |-------------|--------|
-| `homekit`   | HomeKit Thermostat (the default — unchanged behaviour). |
+| `default`   | **Home Default** — follow the platform `defaultExpose` (this is also what leaving `expose` unset does). |
+| `homekit`   | HomeKit Thermostat (the overall default — unchanged behaviour). |
 | `matter`    | Native Matter Room Air Conditioner only. |
 | `both`      | Both — a HomeKit Thermostat **and** a Matter AC for the same zone. |
 

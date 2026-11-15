@@ -49,7 +49,7 @@ Every accessory needs at least `name`, `type` and `outputId`.
 | `minBrightness` / `maxBrightness` | dimmer | Map HomeKit 1–100 % onto the lamp's real usable range. |
 | `powerRelay` | dimmer, thermostat | A relay output number used for true on/off. |
 | `climate` | thermostat | `heat`, `cool`, or `auto` (both + auto). |
-| `expose` | thermostat | `homekit` (default), `matter`, or `both` — expose the zone as a HomeKit Thermostat, a native Matter Room Air Conditioner, or both. Overrides `defaultExpose`. See [Matter air‑conditioning](matter.md). |
+| `expose` | thermostat | `default` (follow `defaultExpose` — shown as **Home Default** in the UI, and what leaving it unset means), `homekit`, `matter`, or `both` — a HomeKit Thermostat, a native Matter Room Air Conditioner, or both. See [Matter air‑conditioning](matter.md). |
 | `temperatureFrom` | thermostat | Read the current temperature from another zone's sensor (for AC zones without their own). |
 
 See **[Accessory types](accessory-types.md)** for what each type does and worked examples.

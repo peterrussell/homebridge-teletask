@@ -113,12 +113,14 @@
             "expose": {
               "title": "Expose As",
               "type": "string",
+              "default": "default",
               "oneOf": [
+                { "title": "Home Default (use the platform setting)", "enum": ["default"] },
                 { "title": "HomeKit Thermostat", "enum": ["homekit"] },
                 { "title": "Matter Room Air Conditioner", "enum": ["matter"] },
                 { "title": "Both", "enum": ["both"] }
               ],
-              "description": "HomeKit thermostat, a native Matter air-conditioner, or both. Leave unset to use the platform default. Matter needs Matter enabled on this (child) bridge and a separate pairing."
+              "description": "How to expose this zone. \"Home Default\" follows the top-level Default Climate Exposure setting. Matter needs Matter enabled on this (child) bridge and a separate pairing."
             },
             "temperatureFrom": {
               "title": "Borrow Temperature From Zone",

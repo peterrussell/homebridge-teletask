@@ -12,12 +12,16 @@ const CLIMATE_TYPES = new Set(["thermostat", "heating"]);
 
 // Normalise the per-accessory (or platform default) `expose` option.
 // "homekit" (default) = HomeKit Thermostat; "matter" = native Matter Room AC;
-// "both" = both. Only meaningful for climate zones.
+// "both" = both. "default"/"none"/unset ⇒ defer to the platform default, then to
+// "homekit". Only meaningful for climate zones.
 function normalizeExpose(value, fallback) {
-  const v = String(value ?? fallback ?? "homekit").trim().toLowerCase();
-  if (v === "matter" || v === "both" || v === "homekit") return v;
-  if (v === "hap" || v === "homekit-only") return "homekit";
-  return "homekit";
+  const one = (x) => {
+    const v = String(x ?? "").trim().toLowerCase();
+    if (v === "matter" || v === "both" || v === "homekit") return v;
+    if (v === "hap" || v === "homekit-only") return "homekit";
+    return null; // "default", "none", "", unknown → fall through to the fallback
+  };
+  return one(value) ?? one(fallback) ?? "homekit";
 }
 const exposesHomeKit = (e) => e === "homekit" || e === "both";
 const exposesMatter = (e) => e === "matter" || e === "both";
