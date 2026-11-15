@@ -87,17 +87,39 @@ async function registerTeletaskMatterAircon(platform, device) {
       ? CSO_HEATING_ONLY
       : CSO_COOLING_ONLY;
 
-  // Default "on" system mode for this zone (what to show/select when powered on).
-  const onSystemMode = canCool ? SYS_COOL : SYS_HEAT;
+  // A heat+cool ("auto") zone also gets Matter's AutoMode feature, so the Home app can
+  // offer Off/Heat/Cool/Auto like the HomeKit thermostat. The default RoomAirConditioner
+  // composition is Heating+Cooling only, so compose the thermostat with AutoMode here.
+  // (AutoMode also makes minSetpointDeadBand a legal attribute — it's a conformance error
+  // without it.) Cool-only / heat-only zones keep the default single-feature composition.
+  const autoZone = canHeat && canCool;
+  let deviceType = matter.deviceTypes.RoomAirConditioner;
+  if (autoZone) {
+    const ts = matter.deviceRequirements?.RoomAirConditioner?.ThermostatServer;
+    if (ts && typeof ts.with === "function") {
+      try {
+        deviceType = matter.deviceTypes.RoomAirConditioner.with(ts.with("Heating", "Cooling", "AutoMode"));
+      } catch (err) {
+        log.debug(`[${device.name}] could not add Matter AutoMode: ${err?.message ?? err}; using Heating/Cooling only`);
+      }
+    }
+  }
 
-  // Homebridge composes this RoomAirConditioner's Thermostat with the Heating and/or
-  // Cooling features but NOT AutoMode, so systemMode must only ever be Off/Cool/Heat.
-  // A TELETASK "auto" zone is reported as whatever it's actually doing right now.
+  // Default "on" system mode for this zone (what to show/select when powered on).
+  const onSystemMode = autoZone ? SYS_AUTO : canCool ? SYS_COOL : SYS_HEAT;
+
+  // systemMode must only use features the composed thermostat actually has: Off/Cool/Heat
+  // always, plus Auto only on an auto zone. A TELETASK auto zone reports Auto when idle in
+  // auto (mode 94), else the mode it's actively running.
   const systemModeNow = () => {
     if (!ctl.isOn()) return SYS_OFF;
+    if (autoZone) {
+      const m = ctl.currentMode();
+      if (m === "auto") return SYS_AUTO;
+      return m === "cool" ? SYS_COOL : SYS_HEAT;
+    }
     if (canCool && ctl.isCooling()) return SYS_COOL;
-    if (canHeat) return SYS_HEAT;
-    return SYS_COOL;
+    return SYS_HEAT;
   };
 
   // The thermostat-cluster attributes that track live state. TELETASK exposes a
@@ -138,7 +160,7 @@ async function registerTeletaskMatterAircon(platform, device) {
   const accessory = {
     UUID: uuid,
     displayName,
-    deviceType: matter.deviceTypes.RoomAirConditioner,
+    deviceType,
     serialNumber: String(device.id),
     manufacturer: "TELETASK",
     model: `DoIP AC zone ${device.number}`,
@@ -158,11 +180,11 @@ async function registerTeletaskMatterAircon(platform, device) {
         minHeatSetpointLimit: toCenti(ctl.MIN_C),
         maxHeatSetpointLimit: toCenti(ctl.MAX_C),
         absMinHeatSetpointLimit: toCenti(ctl.MIN_C),
-        absMaxHeatSetpointLimit: toCenti(ctl.MAX_C)
-        // NOTE: do NOT set minSetpointDeadBand — it's a conformance error unless the
-        // AutoMode feature is present, which it isn't here (Heating/Cooling only). It
-        // would crash behavior init and the accessory would fail to register. Without
-        // AutoMode there's no cross-setpoint constraint, so equal setpoints are fine.
+        absMaxHeatSetpointLimit: toCenti(ctl.MAX_C),
+        // Only legal with the AutoMode feature (auto zones). 0 lets the heating and cooling
+        // setpoints be equal, which they are — a single TELETASK target drives both. Setting
+        // it on a non-AutoMode thermostat is a conformance error that blocks registration.
+        ...(autoZone ? { minSetpointDeadBand: 0 } : {})
       }
     },
     handlers: {
