@@ -48,8 +48,19 @@ function makeClimateControl({ client, device }) {
       await client.setLightPower(relayTarget, on);
       return;
     }
-    // SET_TEMPONOFF is a toggle, so only act when the cached state disagrees.
-    if (Boolean(cached()?.on) !== on) await client.toggleHeatingPower(device.id);
+    // TEMP_ON_OFF is a TOGGLE, not an absolute on/off, so we must know the zone's real
+    // current state to toggle the right way. The cached state can be stale or missing
+    // (e.g. an AC zone with no sensor of its own), which previously made "off" silently
+    // no-op. Read the live state first, and only toggle when it disagrees.
+    let current;
+    try {
+      const s = await client.getState(device.id);
+      const n = s && s.normalized ? s.normalized : s;
+      current = n && typeof n.on === "boolean" ? n.on : Boolean(cached()?.on);
+    } catch {
+      current = Boolean(cached()?.on);
+    }
+    if (current !== on) await client.toggleHeatingPower(device.id);
   };
 
   // mode: "heat" | "cool" | "auto". Relay-backed zones have no addressable zone mode.
