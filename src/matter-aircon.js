@@ -104,15 +104,17 @@ async function registerTeletaskMatterAircon(platform, device) {
     return SYS_HEAT;
   };
 
-  // The thermostat-cluster attributes that track live state. TELETASK exposes a
-  // single target temperature, so both setpoints mirror it where the mode exists.
-  const thermostatState = () => {
+  // Thermostat attributes. TELETASK exposes a single target temperature, so both setpoints
+  // mirror it where the mode exists. `systemMode` is treated as STICKY user intent (see the
+  // note on push() below): it is seeded once here for the initial registration and then only
+  // changed by the user's own commands — never recomputed from live state.
+  const thermostatState = (includeSystemMode) => {
     const target = toCenti(ctl.readTarget());
     const state = {
       localTemperature: toCenti(ctl.readTemp()),
-      systemMode: systemModeNow(),
       controlSequenceOfOperation: cso
     };
+    if (includeSystemMode) state.systemMode = systemModeNow();
     if (canCool) state.occupiedCoolingSetpoint = target;
     if (canHeat) state.occupiedHeatingSetpoint = target;
     return state;
@@ -123,12 +125,15 @@ async function registerTeletaskMatterAircon(platform, device) {
       log.debug(`[${device.name}] Matter ${cluster} update failed: ${err?.message ?? err}`);
     });
 
-  // Push current TELETASK state out to the Matter clusters. Current temperature is
-  // reported via thermostat.localTemperature — this device type has no separate
-  // TemperatureMeasurement behavior (Homebridge composes only onOff + thermostat).
+  // Push current TELETASK state out to the Matter clusters. Current temperature is reported
+  // via thermostat.localTemperature (this device type has no TemperatureMeasurement behavior —
+  // Homebridge composes only onOff + thermostat). onOff tracks the live on/off, but we DO NOT
+  // push `systemMode`: deriving the mode from live demand and pushing it on every state change
+  // made Apple Home cycle through the modes. systemMode is sticky user intent, set only by the
+  // registration seed and the user's own systemModeChange/onOff handlers.
   const push = () => {
     safeUpdate("onOff", { onOff: ctl.isOn() });
-    safeUpdate("thermostat", thermostatState());
+    safeUpdate("thermostat", thermostatState(false));
   };
 
   // Fire a control command without blocking the Matter handler on the library's
@@ -146,7 +151,7 @@ async function registerTeletaskMatterAircon(platform, device) {
     clusters: {
       onOff: { onOff: ctl.isOn() },
       thermostat: {
-        ...thermostatState(),
+        ...thermostatState(true),
         // Setpoint limits (centi-°C) span the same 5–35 °C range the control core
         // clamps to, so every target TELETASK reports is a valid setpoint on BOTH
         // the heating and cooling sides (a single TELETASK target drives both). A
