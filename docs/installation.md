@@ -104,16 +104,23 @@ You should see the plugin load and (once configured) `Connected to Teletask cent
 ## Troubleshooting
 
 **HomeKit keeps losing rooms / names, or the Home app says "Cannot change settings".**
-This is almost always a Homebridge *bridge* problem, not the plugin. The usual cause is the
-bridge advertising HomeKit on more than one network interface — e.g. `bridge.bind` includes a
-VPN interface like `tailscale0` alongside the LAN. HomeKit's mDNS announcement then lists an
-address your home hub can't reach, so it drops accessories and refuses writes. Bind HomeKit to
-the **LAN interface only**:
+This is almost always a Homebridge *bridge* problem, not the plugin. The cause is the bridge
+advertising HomeKit over mDNS on an interface your home hub can't reach — typically a VPN
+interface like `tailscale0` — so the hub is handed an unreachable address, drops accessories
+and refuses writes. Fix it with **both** of these in the bridge config:
 
 ```json
-"bridge": { "bind": ["eth0"] }
+"bridge": { "advertiser": "ciao", "bind": ["eth0"] }
 ```
 
+- `bind: ["eth0"]` — advertise on the LAN interface only.
+- `advertiser: "ciao"` — **important**: the `avahi` and `resolved` advertisers use the system
+  mDNS daemon, which advertises on *all* interfaces and **ignores `bridge.bind`**. Only
+  Homebridge's own `ciao` (or `bonjour-hap`) advertiser honours `bind`, so if your advertiser is
+  `avahi`, setting `bind` alone changes nothing.
+
 Then restart Homebridge. (This only changes what HomeKit advertises — Tailscale and the
-Homebridge UI are unaffected.) Accessory identities are stable across a normal restart, so once
-the advertising is clean your rooms will stick.
+Homebridge UI are unaffected.) Verify with `avahi-browse -rtp _hap._tcp` that your bridge shows
+only the LAN address. Accessory identities are stable across a normal restart, so once the
+advertising is clean your rooms will stick. If the error lingers, reboot your home hub
+(Apple TV / HomePod) to flush its cached copy of the old address.
