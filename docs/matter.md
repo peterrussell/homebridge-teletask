@@ -21,12 +21,14 @@ default every climate zone stays a HomeKit Thermostat exactly as before.
 
 Set `expose` on a climate accessory, or `defaultExpose` on the platform:
 
+A zone is exposed to **one** of HomeKit or Matter — not both (two controllers on one
+zone floods the central unit).
+
 | Value       | Result |
 |-------------|--------|
 | `default`   | **Home Default** — follow the platform `defaultExpose` (this is also what leaving `expose` unset does). |
 | `homekit`   | HomeKit Thermostat (the overall default — unchanged behaviour). |
-| `matter`    | Native Matter Room Air Conditioner only. |
-| `both`      | Both — a HomeKit Thermostat **and** a Matter AC for the same zone. |
+| `matter`    | Native Matter Room Air Conditioner. |
 
 ```json
 {
@@ -67,9 +69,9 @@ plugin's normal HomeKit bridge. After enabling Matter and restarting:
 2. In Apple Home (or Alexa, Google, …): *Add Accessory* → scan that Matter code.
 3. The zone shows up as an air‑conditioner.
 
-With `expose: "both"` you'll get **two tiles** for one zone — a HomeKit thermostat
-(via the usual HomeKit bridge) and a Matter AC (via the Matter pairing). That's
-intended; use it to compare, then settle on one.
+Each zone is HomeKit **or** Matter, so you won't get duplicate tiles. To switch a zone
+from HomeKit to Matter (or back), change its `expose` and restart — the old tile is
+removed and the new one appears (Matter ones need the pairing step above).
 
 ## What maps to what
 

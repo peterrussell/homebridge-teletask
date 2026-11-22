@@ -11,20 +11,22 @@ const RECONNECT_MS = 10000;
 const CLIMATE_TYPES = new Set(["thermostat", "heating"]);
 
 // Normalise the per-accessory (or platform default) `expose` option.
-// "homekit" (default) = HomeKit Thermostat; "matter" = native Matter Room AC;
-// "both" = both. "default"/"none"/unset ⇒ defer to the platform default, then to
-// "homekit". Only meaningful for climate zones.
+// "homekit" (default) = HomeKit Thermostat; "matter" = native Matter Room AC.
+// "default"/"none"/unset ⇒ defer to the platform default, then to "homekit".
+// A zone is exposed to exactly ONE of HomeKit or Matter — exposing both at once
+// put two controllers on the same zone and flooded the central unit, so the legacy
+// "both" value is treated as unset (falls back to the default). Climate zones only.
 function normalizeExpose(value, fallback) {
   const one = (x) => {
     const v = String(x ?? "").trim().toLowerCase();
-    if (v === "matter" || v === "both" || v === "homekit") return v;
+    if (v === "matter" || v === "homekit") return v;
     if (v === "hap" || v === "homekit-only") return "homekit";
-    return null; // "default", "none", "", unknown → fall through to the fallback
+    return null; // "default", "none", "both" (legacy), "", unknown → use the fallback
   };
   return one(value) ?? one(fallback) ?? "homekit";
 }
-const exposesHomeKit = (e) => e === "homekit" || e === "both";
-const exposesMatter = (e) => e === "matter" || e === "both";
+const exposesHomeKit = (e) => e === "homekit";
+const exposesMatter = (e) => e === "matter";
 
 // Teletask function codes <-> HomeKit type, for auto-discovery.
 const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20 };
@@ -90,8 +92,15 @@ class TeletaskPlatform {
         const centralUnit = Number(a.centralUnit ?? defaultCU);
         const number = Number(a.outputId ?? a.number); // "number" accepted as a legacy alias
         const id = a.id ?? `${type}-cu${centralUnit}-n${number}`;
-        // Climate zones can be exposed to HomeKit, Matter, or both; everything else
-        // is HomeKit only.
+        // Climate zones are exposed to HomeKit or Matter (one only); everything else
+        // is HomeKit. The legacy "both" is no longer supported (it double-drove the
+        // zone) — warn and fall back to the default.
+        if (CLIMATE_TYPES.has(type) && String(a.expose ?? "").trim().toLowerCase() === "both") {
+          this.log.warn(
+            `"${a.name ?? id}": expose "both" is no longer supported (it put two controllers on one zone and flooded the unit). ` +
+              `Falling back to the default; set expose to "homekit" or "matter".`
+          );
+        }
         const expose = CLIMATE_TYPES.has(type)
           ? normalizeExpose(a.expose, this.config.defaultExpose)
           : "homekit";

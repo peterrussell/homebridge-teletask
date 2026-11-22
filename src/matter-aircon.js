@@ -135,13 +135,9 @@ async function registerTeletaskMatterAircon(platform, device) {
   // confirming read-back (some outputs never reply). Mirrors platform._fire.
   const fire = (desc, fn) => platform._fire(desc, fn);
 
-  // When a zone is exposed as BOTH, a HomeKit thermostat and this Matter AC share a
-  // name — suffix the Matter one so they're distinguishable in the Home app.
-  const displayName = device.expose === "both" ? `${device.name} xMatter` : device.name;
-
   const accessory = {
     UUID: uuid,
-    displayName,
+    displayName: device.name,
     deviceType,
     serialNumber: String(device.id),
     manufacturer: "TELETASK",

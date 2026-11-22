@@ -43,10 +43,9 @@
         "default": "homekit",
         "oneOf": [
           { "title": "HomeKit Thermostat", "enum": ["homekit"] },
-          { "title": "Matter Room Air Conditioner", "enum": ["matter"] },
-          { "title": "Both", "enum": ["both"] }
+          { "title": "Matter Room Air Conditioner", "enum": ["matter"] }
         ],
-        "description": "How climate zones are exposed unless overridden per zone. Matter needs Matter enabled on this (child) bridge and a separate pairing — see the README."
+        "description": "How climate zones are exposed unless overridden per zone. Pick one — exposing a zone to both HomeKit and Matter puts two controllers on the same zone and floods the central unit. Matter needs Matter enabled on this (child) bridge and a separate pairing — see the README."
       },
       "accessories": {
         "title": "Accessories",
@@ -118,10 +117,9 @@
               "oneOf": [
                 { "title": "Home Default (use the platform setting)", "enum": ["default"] },
                 { "title": "HomeKit Thermostat", "enum": ["homekit"] },
-                { "title": "Matter Room Air Conditioner", "enum": ["matter"] },
-                { "title": "Both", "enum": ["both"] }
+                { "title": "Matter Room Air Conditioner", "enum": ["matter"] }
               ],
-              "description": "How to expose this zone. \"Home Default\" follows the top-level Default Climate Exposure setting. Matter needs Matter enabled on this (child) bridge and a separate pairing."
+              "description": "How to expose this zone — pick one. \"Home Default\" follows the top-level Default Climate Exposure setting. Exposing a zone to both HomeKit and Matter at once puts two controllers on the same zone and floods the central unit, so it is no longer offered. Matter needs Matter enabled on this (child) bridge and a separate pairing."
             },
             "temperatureFrom": {
               "title": "Borrow Temperature From Zone",
