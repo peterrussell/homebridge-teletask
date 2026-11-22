@@ -100,3 +100,20 @@ sudo hb-service logs | grep -i "loaded plugin: homebridge-teletask"
 sudo hb-service logs | grep -iE "loaded plugin: homebridge-teletask|connected to teletask"
 ```
 You should see the plugin load and (once configured) `Connected to Teletask central unit…`.
+
+## Troubleshooting
+
+**HomeKit keeps losing rooms / names, or the Home app says "Cannot change settings".**
+This is almost always a Homebridge *bridge* problem, not the plugin. The usual cause is the
+bridge advertising HomeKit on more than one network interface — e.g. `bridge.bind` includes a
+VPN interface like `tailscale0` alongside the LAN. HomeKit's mDNS announcement then lists an
+address your home hub can't reach, so it drops accessories and refuses writes. Bind HomeKit to
+the **LAN interface only**:
+
+```json
+"bridge": { "bind": ["eth0"] }
+```
+
+Then restart Homebridge. (This only changes what HomeKit advertises — Tailscale and the
+Homebridge UI are unaffected.) Accessory identities are stable across a normal restart, so once
+the advertising is clean your rooms will stick.

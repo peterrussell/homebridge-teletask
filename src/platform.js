@@ -419,10 +419,20 @@ class TeletaskPlatform {
     const client = this.client;
     const cached = () => this.client.getCachedState(device.id)?.normalized ?? null;
 
-    // Replace any existing non-information service so type changes take effect cleanly.
-    for (const svc of [...accessory.services]) {
-      if (svc.UUID !== S.AccessoryInformation.UUID) accessory.removeService(svc);
-    }
+    // Reuse the service HomeKit restored from cache rather than rebuilding it every
+    // startup. Rebuilding (remove + re-add) changed service instance IDs on each boot,
+    // which bumped HomeKit's configuration number and destabilised the Home app
+    // (dropped rooms, "cannot change settings"). We only drop a service whose TYPE no
+    // longer matches (i.e. the accessory's `type` was changed in config), and we keep
+    // the existing service's name so a rename done in the Home app survives restarts.
+    const useService = (ServiceType) => {
+      for (const svc of [...accessory.services]) {
+        if (svc.UUID !== S.AccessoryInformation.UUID && svc.UUID !== ServiceType.UUID) {
+          accessory.removeService(svc);
+        }
+      }
+      return accessory.getService(ServiceType) || accessory.addService(ServiceType, device.name);
+    };
 
     let update;
 
@@ -433,7 +443,7 @@ class TeletaskPlatform {
       case "outlet": {
         const ServiceType =
           device.type === "fan" ? S.Fan : device.type === "outlet" ? S.Outlet : device.type === "switch" ? S.Switch : S.Lightbulb;
-        const service = accessory.addService(ServiceType, device.name);
+        const service = useService(ServiceType);
         service
           .getCharacteristic(C.On)
           .onGet(() => Boolean(cached()?.on))
@@ -443,7 +453,7 @@ class TeletaskPlatform {
       }
 
       case "dimmer": {
-        const service = accessory.addService(S.Lightbulb, device.name);
+        const service = useService(S.Lightbulb);
         // A Teletask dimmer only takes a level (0 = off, >0 = on). There is no separate
         // on/off command, so map HomeKit On/Off to the level. Optionally, a powerRelay
         // can provide a hard on/off (light that needs a relay for power).
@@ -495,7 +505,7 @@ class TeletaskPlatform {
       case "cover":
       case "window":
       case "shade": {
-        const service = accessory.addService(S.WindowCovering, device.name);
+        const service = useService(S.WindowCovering);
         const toHomeKit = (pos) => (device.invertPosition ? 100 - pos : pos);
         const fromHomeKit = (pos) => (device.invertPosition ? 100 - pos : pos);
 
@@ -525,7 +535,7 @@ class TeletaskPlatform {
 
       case "thermostat":
       case "heating": {
-        const service = accessory.addService(S.Thermostat, device.name);
+        const service = useService(S.Thermostat);
         // Teletask setpoints can dip below HomeKit's default 10°C min (frost ≈ 5°C).
         service.getCharacteristic(C.TargetTemperature).setProps({ minValue: 5, maxValue: 35, minStep: 0.5 });
 
@@ -581,7 +591,7 @@ class TeletaskPlatform {
 
       case "sensor":
       case "temperature": {
-        const service = accessory.addService(S.TemperatureSensor, device.name);
+        const service = useService(S.TemperatureSensor);
         service.getCharacteristic(C.CurrentTemperature).onGet(() => Number(cached()?.valueCelsius ?? 0));
         update = (n) => {
           if (typeof n?.valueCelsius === "number") service.updateCharacteristic(C.CurrentTemperature, n.valueCelsius);
@@ -591,7 +601,7 @@ class TeletaskPlatform {
 
       default: {
         this.log.warn(`Unknown accessory type "${device.type}" for ${device.name}; defaulting to Switch.`);
-        const service = accessory.addService(S.Switch, device.name);
+        const service = useService(S.Switch);
         service
           .getCharacteristic(C.On)
           .onGet(() => Boolean(cached()?.on))
