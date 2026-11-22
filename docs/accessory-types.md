@@ -48,7 +48,7 @@ A TELETASK **climate/sensor zone** becomes a HomeKit Thermostat with current tem
 setpoint and mode.
 
 ```json
-{ "name": "Living Room Heating", "type": "thermostat", "outputId": 3, "climate": "heat", "powerRelay": 17 }
+{ "name": "Living Room Heating", "type": "thermostat", "outputId": 3, "climate": "heat" }
 { "name": "Living Room Aircon",  "type": "thermostat", "outputId": 9, "climate": "auto", "temperatureFrom": 3 }
 ```
 
@@ -59,8 +59,12 @@ setpoint and mode.
 - **`temperatureFrom`** — some AC zones report no temperature of their own. Point this at a
   sensor zone in the same room (e.g. the radiator zone) and the thermostat borrows that
   reading.
-- **`powerRelay`** — drive the zone's on/off from a relay (e.g. an underfloor‑heating circuit)
-  instead of the zone's own power toggle.
+- **`powerRelay`** — ⚠️ **normally leave this off for a climate zone.** On/off is handled by the
+  zone itself (its `TEMP_ON_OFF`), which also makes the Target follow the Day preset — turning the
+  zone on is what lets your setpoint take effect. Do **not** point `powerRelay` at the zone's own
+  heating/cooling **output** relay: that relay only follows live demand (on while actually heating),
+  so using it for on/off leaves the zone disabled and the Target stuck at the frost value. Only use
+  `powerRelay` if you have a genuinely separate relay that cuts power to the whole zone independently.
 
 ### How setpoints and off work
 

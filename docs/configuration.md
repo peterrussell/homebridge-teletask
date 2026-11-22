@@ -15,7 +15,7 @@ in the Homebridge UI (*Config*) or in `config.json`.
     { "name": "Kitchen Light", "type": "light", "outputId": 13 },
     { "name": "Living Room Dimmer", "type": "dimmer", "outputId": 1, "maxBrightness": 75, "powerRelay": 16 },
     { "name": "Living Room Blind", "type": "blind", "outputId": 5, "invertPosition": true },
-    { "name": "Living Room Heating", "type": "thermostat", "outputId": 3, "climate": "heat", "powerRelay": 17 },
+    { "name": "Living Room Heating", "type": "thermostat", "outputId": 3, "climate": "heat" },
     { "name": "Living Room Aircon", "type": "thermostat", "outputId": 9, "climate": "auto", "temperatureFrom": 3 }
   ]
 }
@@ -47,7 +47,7 @@ Every accessory needs at least `name`, `type` and `outputId`.
 | `visible` | all | `false` keeps the entry in the config but hides it from HomeKit. |
 | `invertPosition` | blind | Flip if open/closed is reversed (TELETASK blinds are usually inverted → `true`). |
 | `minBrightness` / `maxBrightness` | dimmer | Map HomeKit 1–100 % onto the lamp's real usable range. |
-| `powerRelay` | dimmer, thermostat | A relay output number used for true on/off. |
+| `powerRelay` | dimmer, (thermostat) | A relay output for true on/off. **Dimmers:** a relay that fully cuts a lamp that won't switch off at level 0. **Thermostats:** normally omit — the zone's own `TEMP_ON_OFF` handles on/off (and lets the Target follow the Day preset). Only set it for a genuinely independent power-cut relay; never the zone's own demand/output relay, or the zone stays off and the setpoint sticks at frost. |
 | `climate` | thermostat | `heat`, `cool`, or `auto` (both + auto). |
 | `expose` | thermostat | `default` (follow `defaultExpose` — shown as **Home Default** in the UI, and what leaving it unset means), `homekit`, or `matter` — a HomeKit Thermostat or a native Matter Room Air Conditioner (one only; a legacy `both` falls back to the default). See [Matter air‑conditioning](matter.md). |
 | `temperatureFrom` | thermostat | Read the current temperature from another zone's sensor (for AC zones without their own). |
