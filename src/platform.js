@@ -552,38 +552,48 @@ class TeletaskPlatform {
         // Room Air Conditioner front-end (climate-core.js), so the two never diverge.
         const ctl = makeClimateControl({ client, device });
 
+        // CurrentHeatingCoolingState = what the zone is actually DOING right now (its relay/
+        // valve demand). This legitimately reads the demand (relay or sensor power byte).
         const activeState = (n) =>
           !ctl.isOn() ? C.CurrentHeatingCoolingState.OFF
           : ctl.isCooling(n) ? C.CurrentHeatingCoolingState.COOL
           : C.CurrentHeatingCoolingState.HEAT;
-        const targetState = (n) => {
-          switch (ctl.currentMode(n)) {
-            case "off": return T.OFF;
-            case "heat": return T.HEAT;
-            case "cool": return T.COOL;
-            default: return T.AUTO;
-          }
-        };
+        const modeToHK = (m) =>
+          m === "cool" ? T.COOL : m === "auto" ? T.AUTO : m === "off" ? T.OFF : T.HEAT;
+
+        // TargetHeatingCoolingState is the user's CHOSEN mode and must be "sticky". It must
+        // NOT be recomputed from live activity: a zone's demand (and any `powerRelay` that
+        // follows it) drops to off whenever the room has reached the setpoint, so deriving
+        // the mode from it made the thermostat flip to Off the moment you set a target at or
+        // below the current temperature — the reported bug. Seed it from the value HomeKit
+        // restored (preserved across restarts by service reuse), fall back to the zone's
+        // current mode, and thereafter change it only when the user does.
+        let desired = service.getCharacteristic(T).value;
+        if (desired === null || desired === undefined) desired = modeToHK(ctl.currentMode());
 
         service.getCharacteristic(C.CurrentTemperature).onGet(() => ctl.readTemp());
         service.getCharacteristic(C.TargetTemperature)
           .onGet(() => ctl.readTarget())
           .onSet((value) => this._fire(device.name, () => ctl.setTarget(Number(value))));
         service.getCharacteristic(T)
-          .onGet(() => targetState(cached()))
-          .onSet((value) => this._fire(device.name, async () => {
-            if (value === T.OFF) { await ctl.setPower(false); return; }
-            await ctl.setPower(true);
-            // For zone-controlled (AC) thermostats, also set the heat/cool/auto mode.
-            const mode = { [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
-            await ctl.setMode(mode);
-          }));
+          .onGet(() => desired)
+          .onSet((value) => {
+            desired = value;
+            this._fire(device.name, async () => {
+              if (value === T.OFF) { await ctl.setPower(false); return; }
+              await ctl.setPower(true);
+              // For zone-controlled thermostats, also set the heat/cool/auto mode.
+              const mode = { [T.HEAT]: "heat", [T.COOL]: "cool", [T.AUTO]: "auto" }[value] ?? "auto";
+              await ctl.setMode(mode);
+            });
+          });
         service.getCharacteristic(C.CurrentHeatingCoolingState).onGet(() => activeState(cached()));
 
         update = (n) => {
           service.updateCharacteristic(C.CurrentTemperature, ctl.readTemp());
           if (typeof n?.targetCelsius === "number") service.updateCharacteristic(C.TargetTemperature, ctl.clamp(n.targetCelsius));
-          service.updateCharacteristic(T, targetState(n));
+          // TargetHeatingCoolingState stays as the user set it (sticky) — only reflect live
+          // heating/cooling activity here.
           service.updateCharacteristic(C.CurrentHeatingCoolingState, activeState(n));
         };
         break;
