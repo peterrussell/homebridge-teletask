@@ -1,0 +1,217 @@
+{
+  "pluginAlias": "Teletask",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Bridges TELETASK DoIP devices into HomeKit. Requires an active TDS15132 (DoIP Open Protocol) license on your central unit — see the plugin README.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Teletask",
+        "required": true
+      },
+      "host": {
+        "title": "Central Unit IP Address",
+        "type": "string",
+        "format": "ipv4",
+        "required": true,
+        "placeholder": "192.168.1.113"
+      },
+      "port": {
+        "title": "Port",
+        "type": "integer",
+        "default": 55957,
+        "description": "DoIP port — leave at 55957 unless you changed it in PROSOFT."
+      },
+      "centralUnit": {
+        "title": "Default Central Unit",
+        "type": "integer",
+        "default": 1,
+        "description": "Central unit index (1 = 'A')."
+      },
+      "autoDiscover": {
+        "title": "Auto-Discover Outputs on Startup",
+        "type": "boolean",
+        "default": true,
+        "description": "Probe the unit at startup and add any new outputs. Uncheck to disable."
+      },
+      "defaultExpose": {
+        "title": "Default Climate Exposure",
+        "type": "string",
+        "default": "homekit",
+        "oneOf": [
+          { "title": "HomeKit Thermostat", "enum": ["homekit"] },
+          { "title": "Matter Room Air Conditioner", "enum": ["matter"] }
+        ],
+        "description": "How climate zones are exposed unless overridden per zone. Pick one — exposing a zone to both HomeKit and Matter puts two controllers on the same zone and floods the central unit. Matter needs Matter enabled on this (child) bridge and a separate pairing — see the README."
+      },
+      "accessories": {
+        "title": "Accessories",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true
+            },
+            "type": {
+              "title": "Type",
+              "type": "string",
+              "default": "light",
+              "oneOf": [
+                { "title": "Light (Relay)", "enum": ["light"] },
+                { "title": "Switch (Relay)", "enum": ["switch"] },
+                { "title": "Fan (Relay)", "enum": ["fan"] },
+                { "title": "Outlet (Relay)", "enum": ["outlet"] },
+                { "title": "Dimmer", "enum": ["dimmer"] },
+                { "title": "Blind / Window Covering (Motor)", "enum": ["blind"] },
+                { "title": "Thermostat / Climate Zone", "enum": ["thermostat"] },
+                { "title": "Heating Zone (Same as Thermostat)", "enum": ["heating"] },
+                { "title": "Temperature Sensor", "enum": ["sensor"] }
+              ],
+              "required": true
+            },
+            "outputId": {
+              "title": "Output #",
+              "type": "integer",
+              "required": true,
+              "description": "Output number from PROSOFT (GUISOFT → Define Output)."
+            },
+            "visible": {
+              "title": "Visible in HomeKit",
+              "type": "boolean",
+              "default": true,
+              "description": "Uncheck to keep in config but hide from HomeKit."
+            },
+            "centralUnit": {
+              "title": "Central Unit (Optional)",
+              "type": "integer",
+              "description": "Overrides the default central unit for this accessory."
+            },
+            "invertPosition": {
+              "title": "Invert Blind Position",
+              "type": "boolean",
+              "default": false,
+              "description": "Flip if open/closed is reversed."
+            },
+            "climate": {
+              "title": "Climate Mode",
+              "type": "string",
+              "default": "auto",
+              "oneOf": [
+                { "title": "Heat Only (Radiator)", "enum": ["heat"] },
+                { "title": "Cool Only (AC)", "enum": ["cool"] },
+                { "title": "Heat + Cool + Auto", "enum": ["auto"] }
+              ],
+              "description": "Modes the zone supports."
+            },
+            "expose": {
+              "title": "Expose As",
+              "type": "string",
+              "default": "default",
+              "required": true,
+              "oneOf": [
+                { "title": "Home Default (use the platform setting)", "enum": ["default"] },
+                { "title": "HomeKit Thermostat", "enum": ["homekit"] },
+                { "title": "Matter Room Air Conditioner", "enum": ["matter"] }
+              ],
+              "description": "How to expose this zone — pick one. \"Home Default\" follows the top-level Default Climate Exposure setting. Exposing a zone to both HomeKit and Matter at once puts two controllers on the same zone and floods the central unit, so it is no longer offered. Matter needs Matter enabled on this (child) bridge and a separate pairing."
+            },
+            "temperatureFrom": {
+              "title": "Borrow Temperature From Zone",
+              "type": "integer",
+              "description": "Read temperature from another zone (for AC with no sensor of its own)."
+            },
+            "powerRelay": {
+              "title": "On/Off via Relay",
+              "type": "integer",
+              "description": "Relay output used for true on/off."
+            },
+            "minBrightness": {
+              "title": "Min Level (HomeKit 1%)",
+              "type": "integer",
+              "description": "Teletask level (0-100) at HomeKit 1%."
+            },
+            "maxBrightness": {
+              "title": "Max Level (HomeKit 100%)",
+              "type": "integer",
+              "description": "Teletask level (0-100) at HomeKit 100% (e.g. 75)."
+            }
+          }
+        }
+      }
+    }
+  },
+  "layout": [
+    {
+      "type": "flex",
+      "flex-flow": "row wrap",
+      "items": ["name", "centralUnit"]
+    },
+    {
+      "type": "flex",
+      "flex-flow": "row wrap",
+      "items": ["host", "port"]
+    },
+    "autoDiscover",
+    "defaultExpose",
+    {
+      "key": "accessories",
+      "type": "array",
+      "title": "Accessories",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "accessories[].name",
+        {
+          "type": "flex",
+          "flex-flow": "row wrap",
+          "items": ["accessories[].type", "accessories[].outputId"]
+        },
+        "accessories[].visible",
+        {
+          "key": "accessories[].invertPosition",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && a.type === 'blind';"
+          }
+        },
+        {
+          "type": "flex",
+          "flex-flow": "row wrap",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && a.type === 'dimmer';"
+          },
+          "items": ["accessories[].minBrightness", "accessories[].maxBrightness"]
+        },
+        {
+          "key": "accessories[].climate",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'thermostat' || a.type === 'heating');"
+          }
+        },
+        {
+          "key": "accessories[].expose",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'thermostat' || a.type === 'heating');"
+          }
+        },
+        {
+          "key": "accessories[].temperatureFrom",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'thermostat' || a.type === 'heating');"
+          }
+        },
+        {
+          "key": "accessories[].powerRelay",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'dimmer' || a.type === 'thermostat' || a.type === 'heating');"
+          }
+        }
+      ]
+    }
+  ]
+}
