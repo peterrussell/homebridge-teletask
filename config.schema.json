@@ -71,7 +71,8 @@
                 { "title": "Blind / Window Covering (Motor)", "enum": ["blind"] },
                 { "title": "Thermostat / Climate Zone", "enum": ["thermostat"] },
                 { "title": "Heating Zone (Same as Thermostat)", "enum": ["heating"] },
-                { "title": "Temperature Sensor", "enum": ["sensor"] }
+                { "title": "Temperature Sensor", "enum": ["sensor"] },
+                { "title": "Flag (read-only Switch)", "enum": ["flag"] }
               ],
               "required": true
             },

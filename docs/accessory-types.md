@@ -80,3 +80,31 @@ For a read‑only temperature reading (no control):
 ```json
 { "name": "Outside Temp", "type": "sensor", "outputId": 12 }
 ```
+
+## Flags — read‑only switches (panel LEDs, logic flags)
+
+A TELETASK **flag** is a global boolean that drives panel‑button LEDs and PROSOFT logic. Expose
+one as a **read‑only** HomeKit switch so Home can *observe* its state — and trigger automations
+off it — while the flag stays owned by TELETASK:
+
+```json
+{ "name": "Hall LED", "type": "flag", "outputId": 12 }
+```
+
+- `outputId` is the **flag number** from PROSOFT (not a relay/output number).
+- Flags are global, so **don't** set `centralUnit` — they're always addressed on central unit 0.
+- The switch is **read‑only**: HomeKit can read it and react to it, but tapping the tile won't
+  change the flag (the toggle snaps back). PROSOFT keeps full control of the flag and its LED.
+
+### Why this is useful
+
+The flag becomes a single source of truth you can fan out from. Whatever sets the flag in
+TELETASK (a wall‑panel button, a mood, PROSOFT logic) lights the LED **and** flips this HomeKit
+switch, so a Home automation — *"When Hall LED turns on…"* — can drive any non‑TELETASK HomeKit
+device (Hue lights, a speaker, a smart plug) alongside the PROSOFT‑configured actions. HomeKit
+observes; it never writes the flag back.
+
+> **Live state needs the flag to report.** The plugin subscribes to flags on connect, so a flag
+> that changes in TELETASK updates the switch. Confirm the switch tracks the LED on your unit —
+> if it doesn't move, check that the flag is configured to report (and that the TDS15132 licence
+> is active so the unit pushes state).

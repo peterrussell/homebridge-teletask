@@ -6,6 +6,11 @@ const { registerTeletaskMatterAircon } = require("./matter-aircon.js");
 
 const RECONNECT_MS = 10000;
 
+// TELETASK FLAG function code (TDS15132 §5). Flags are global (central unit 0) booleans
+// that drive panel-button LEDs and PROSOFT logic. We expose them as read-only HomeKit
+// switches so Home automations can observe the LED state without writing it back.
+const FUNCTION_FLAG = 15;
+
 // Accessory types that are climate zones (can be a HomeKit Thermostat and/or a
 // native Matter Room Air Conditioner).
 const CLIMATE_TYPES = new Set(["thermostat", "heating"]);
@@ -29,7 +34,7 @@ const exposesHomeKit = (e) => e === "homekit";
 const exposesMatter = (e) => e === "matter";
 
 // Teletask function codes <-> HomeKit type, for auto-discovery.
-const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20 };
+const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20, flag: 15 };
 const TYPE_FOR_FN = { 1: "light", 2: "dimmer", 6: "blind", 20: "thermostat" };
 const LABEL_FOR_FN = { 1: "Light", 2: "Dimmer", 6: "Blind", 20: "Zone" };
 
@@ -89,7 +94,10 @@ class TeletaskPlatform {
       .filter((a) => a && a.type && (a.outputId ?? a.number) !== undefined && a.visible !== false)
       .map((a) => {
         const type = String(a.type).trim().toLowerCase();
-        const centralUnit = Number(a.centralUnit ?? defaultCU);
+        const isFlag = type === "flag";
+        // Flags are global functions addressed on central unit 0; everything else
+        // defaults to the configured central unit.
+        const centralUnit = isFlag ? 0 : Number(a.centralUnit ?? defaultCU);
         const number = Number(a.outputId ?? a.number); // "number" accepted as a legacy alias
         const id = a.id ?? `${type}-cu${centralUnit}-n${number}`;
         // Climate zones are exposed to HomeKit or Matter (one only); everything else
@@ -109,6 +117,9 @@ class TeletaskPlatform {
           type,
           centralUnit,
           number,
+          // The library maps most types to a function code, but not "flag"; pass it
+          // explicitly so the client targets the FLAG function.
+          functionCode: isFlag ? FUNCTION_FLAG : undefined,
           name: a.name ?? id,
           expose,
           invertPosition: Boolean(a.invertPosition),
@@ -144,12 +155,14 @@ class TeletaskPlatform {
     this.client = new TeletaskClient({
       host: this.config.host,
       port: Number(this.config.port ?? 55957),
-      devices: this.devices.map(({ id, type, centralUnit, number, name }) => ({
+      devices: this.devices.map(({ id, type, centralUnit, number, name, functionCode }) => ({
         id,
         type,
         centralUnit,
         number,
-        name
+        name,
+        // Only set for flags; undefined lets the library infer from `type`.
+        ...(functionCode !== undefined ? { functionCode } : {})
       }))
     });
 
@@ -606,6 +619,28 @@ class TeletaskPlatform {
         update = (n) => {
           if (typeof n?.valueCelsius === "number") service.updateCharacteristic(C.CurrentTemperature, n.valueCelsius);
         };
+        break;
+      }
+
+      case "flag": {
+        // Read-only switch backed by a TELETASK flag. HomeKit can observe the flag/LED
+        // state (and trigger Home automations off it), but must NOT write it back — the
+        // flag stays owned by TELETASK/PROSOFT. Writes from HomeKit are ignored and the
+        // tile snaps back to the real state, so the switch is effectively read-only.
+        const service = useService(S.Switch);
+        const isOn = () => Boolean(cached()?.on);
+        service
+          .getCharacteristic(C.On)
+          .onGet(() => isOn())
+          .onSet((value) => {
+            if (Boolean(value) !== isOn()) {
+              this.log.debug(`${device.name} is a read-only flag; ignoring HomeKit write.`);
+              // Revert the optimistic change on the next tick so the tile reflects
+              // the real flag state rather than the attempted value.
+              setTimeout(() => service.updateCharacteristic(C.On, isOn()), 0);
+            }
+          });
+        update = (n) => service.updateCharacteristic(C.On, Boolean(n?.on));
         break;
       }
 

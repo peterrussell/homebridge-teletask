@@ -48,6 +48,8 @@ see the docs below.
 | Lightbulb + brightness | dimmer | brightness‑range mapping; optional relay for a true off |
 | Window Covering | motor | position + open/close |
 | Thermostat | climate / sensor zone | heating **and** air‑conditioning, with setpoint & modes |
+| Temperature Sensor | sensor zone | read‑only temperature |
+| Switch (read‑only) | flag | expose a panel LED / logic flag so Home automations can react to it — HomeKit observes, never writes it back |
 | Matter Room Air Conditioner | climate / sensor zone | AC zones can instead (or also) be exposed as a native **Matter** air‑conditioner — see **[Matter air‑conditioning](docs/matter.md)** |
 
 ---
