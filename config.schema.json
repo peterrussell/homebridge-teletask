@@ -33,9 +33,14 @@
       },
       "autoDiscover": {
         "title": "Auto-Discover Outputs on Startup",
-        "type": "boolean",
-        "default": true,
-        "description": "Probe the unit at startup and add any new outputs. Uncheck to disable."
+        "type": "string",
+        "default": "on",
+        "oneOf": [
+          { "title": "On (every startup)", "enum": ["on"] },
+          { "title": "Once (next restart only, then Off)", "enum": ["once"] },
+          { "title": "Off", "enum": ["off"] }
+        ],
+        "description": "Probe the unit at startup and add any new outputs, including flags (probed on central unit 0). \"Once\" runs on the next restart then sets itself back to Off."
       },
       "defaultExpose": {
         "title": "Default Climate Exposure",
@@ -72,7 +77,8 @@
                 { "title": "Thermostat / Climate Zone", "enum": ["thermostat"] },
                 { "title": "Heating Zone (Same as Thermostat)", "enum": ["heating"] },
                 { "title": "Temperature Sensor", "enum": ["sensor"] },
-                { "title": "Flag (read-only Switch)", "enum": ["flag"] }
+                { "title": "Flag (read-only Switch)", "enum": ["flag"] },
+                { "title": "Button (Flag → press event)", "enum": ["button"] }
               ],
               "required": true
             },
@@ -141,6 +147,18 @@
               "title": "Max Level (HomeKit 100%)",
               "type": "integer",
               "description": "Teletask level (0-100) at HomeKit 100% (e.g. 75)."
+            },
+            "writable": {
+              "title": "Writable (HomeKit can set the flag)",
+              "type": "boolean",
+              "default": true,
+              "description": "Flag only: whether HomeKit may SET this flag (and its panel LED), not just read it. On by default — set to false for a read-only flag. Note: if the flag drives PROSOFT logic (a mood, relay or condition), a HomeKit write or a tile tap will actuate it."
+            },
+            "prosoftRef": {
+              "title": "TELETASK Reference",
+              "type": "string",
+              "readOnly": true,
+              "description": "Auto-filled TELETASK id for this output (e.g. SEN 04, MOT 03, REL 05, DIM 01, FLG 01). Read-only — the plugin derives it from the type and output number; look the accessory up under that code in PROSOFT. Blank until you set the type and number on a new accessory."
             }
           }
         }
@@ -168,6 +186,7 @@
       "expanded": false,
       "items": [
         "accessories[].name",
+        { "key": "accessories[].prosoftRef", "readonly": true },
         {
           "type": "flex",
           "flex-flow": "row wrap",
@@ -210,6 +229,12 @@
           "key": "accessories[].powerRelay",
           "condition": {
             "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && (a.type === 'dimmer' || a.type === 'thermostat' || a.type === 'heating');"
+          }
+        },
+        {
+          "key": "accessories[].writable",
+          "condition": {
+            "functionBody": "var i = Array.isArray(arrayIndices) ? arrayIndices[arrayIndices.length - 1] : arrayIndices; var a = model.accessories[i]; return !!a && a.type === 'flag';"
           }
         }
       ]

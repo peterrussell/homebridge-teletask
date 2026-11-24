@@ -7,8 +7,10 @@ const { registerTeletaskMatterAircon } = require("./matter-aircon.js");
 const RECONNECT_MS = 10000;
 
 // TELETASK FLAG function code (TDS15132 §5). Flags are global (central unit 0) booleans
-// that drive panel-button LEDs and PROSOFT logic. We expose them as read-only HomeKit
-// switches so Home automations can observe the LED state without writing it back.
+// that drive panel-button LEDs and PROSOFT logic. We expose them either as a read-only
+// HomeKit switch ("flag" — observe the LED state) or as a HomeKit button / Stateless
+// Programmable Switch ("button" — fire a press event on each flag change). Both are
+// backed by the same FLAG function; HomeKit never writes the flag back.
 const FUNCTION_FLAG = 15;
 
 // Accessory types that are climate zones (can be a HomeKit Thermostat and/or a
@@ -34,9 +36,27 @@ const exposesHomeKit = (e) => e === "homekit";
 const exposesMatter = (e) => e === "matter";
 
 // Teletask function codes <-> HomeKit type, for auto-discovery.
-const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20, flag: 15 };
-const TYPE_FOR_FN = { 1: "light", 2: "dimmer", 6: "blind", 20: "thermostat" };
-const LABEL_FOR_FN = { 1: "Light", 2: "Dimmer", 6: "Blind", 20: "Zone" };
+const FN_FOR_TYPE = { light: 1, switch: 1, fan: 1, outlet: 1, dimmer: 2, blind: 6, cover: 6, window: 6, shade: 6, thermostat: 20, heating: 20, sensor: 20, flag: 15, button: 15 };
+const TYPE_FOR_FN = { 1: "light", 2: "dimmer", 6: "blind", 20: "thermostat", 15: "flag" };
+const LABEL_FOR_FN = { 1: "Light", 2: "Dimmer", 6: "Blind", 20: "Zone", 15: "Flag" };
+
+// PROSOFT-style reference prefix per accessory type. The central unit holds no readable
+// names for its outputs (those live only in the encrypted PROSOFT project), but the
+// TELETASK id — REL/DIM/MOT/SEN/FLG + number — is derivable from type + number, and is
+// exactly what you look an accessory up by in PROSOFT. We fill it as a read-only hint.
+const REF_PREFIX = {
+  light: "REL", switch: "REL", fan: "REL", outlet: "REL",
+  dimmer: "DIM",
+  blind: "MOT", cover: "MOT", window: "MOT", shade: "MOT",
+  thermostat: "SEN", heating: "SEN", sensor: "SEN", temperature: "SEN",
+  flag: "FLG", button: "FLG"
+};
+function prosoftRefFor(type, number) {
+  const p = REF_PREFIX[String(type ?? "").toLowerCase()];
+  const n = Number(number);
+  if (!p || !Number.isFinite(n)) return null;
+  return `${p} ${String(n).padStart(2, "0")}`;
+}
 
 // Discovery-time "looks unused" heuristic. The DoIP state byte can't *prove* a load is
 // wired — verified against a real unit: a switched-ON relay reads 0xFF, identical to an
@@ -94,7 +114,9 @@ class TeletaskPlatform {
       .filter((a) => a && a.type && (a.outputId ?? a.number) !== undefined && a.visible !== false)
       .map((a) => {
         const type = String(a.type).trim().toLowerCase();
-        const isFlag = type === "flag";
+        // "flag" (read-only switch) and "button" (programmable switch) are both backed
+        // by a global FLAG.
+        const isFlag = type === "flag" || type === "button";
         // Flags are global functions addressed on central unit 0; everything else
         // defaults to the configured central unit.
         const centralUnit = isFlag ? 0 : Number(a.centralUnit ?? defaultCU);
@@ -120,6 +142,10 @@ class TeletaskPlatform {
           // The library maps most types to a function code, but not "flag"; pass it
           // explicitly so the client targets the FLAG function.
           functionCode: isFlag ? FUNCTION_FLAG : undefined,
+          // Flag only: allow HomeKit to SET the flag (not just read it). Writable by
+          // default; set "writable": false for a read-only flag. Does not affect the
+          // device id/UUID, so toggling it never churns the accessory.
+          writable: a.writable !== false,
           name: a.name ?? id,
           expose,
           invertPosition: Boolean(a.invertPosition),
@@ -137,15 +163,34 @@ class TeletaskPlatform {
     // It's a pinned git dependency (see package.json), resolved from node_modules.
     const { TeletaskClient } = await import("js-teletask-api");
 
-    // Probe the unit and merge any newly-found outputs into the config. On by default;
-    // disable by setting "autoDiscover": false.
-    if (this.config.autoDiscover !== false) {
+    // Probe the unit and merge any newly-found outputs into the config.
+    //   true / "on"  (default) — probe every startup
+    //   "once"                 — probe this startup only, then self-disable to false
+    //   false / "off"          — never probe
+    const adRaw = this.config.autoDiscover;
+    const adMode =
+      adRaw === false || String(adRaw).toLowerCase() === "off" ? "off"
+      : String(adRaw).toLowerCase() === "once" ? "once"
+      : "on";
+    if (adMode !== "off") {
+      // "once": flip the stored setting off now, so this run is the only one even if the
+      // merge below finds nothing new to write. Use the string "off" so the value stays
+      // valid against the schema's on/once/off dropdown.
+      if (adMode === "once") this.config.autoDiscover = "off";
       try {
         await this._autoDiscoverMerge();
       } catch (e) {
         this.log.warn(`Auto-discover failed: ${e?.message ?? e}`);
       }
+      if (adMode === "once") {
+        this.log.info('Auto-discover "once" complete — turning auto-discovery off for future restarts.');
+        this._writeConfig();
+      }
     }
+
+    // Fill/refresh the read-only TELETASK reference id on each accessory (REL 05, SEN 04,
+    // MOT 03, …). Drops the old descriptive field. No-op once everything is in sync.
+    this._syncProsoftRefs();
 
     if (!this.devices.length) {
       this.log.warn("No accessories configured — add some in the plugin settings.");
@@ -232,7 +277,9 @@ class TeletaskPlatform {
     const host = this.config.host;
     const port = Number(this.config.port ?? 55957);
     const cu = Number(this.config.centralUnit ?? 1);
-    const probes = [[1, 32], [2, 16], [6, 16], [20, 24]]; // relay, dimmer, motor, sensor
+    // [centralUnit, functionCode, maxNumber]. Relay/dimmer/motor/sensor live on the
+    // configured central unit; flags are global and answer FunctionGet on central unit 0.
+    const probes = [[cu, 1, 32], [cu, 2, 16], [cu, 6, 16], [cu, 20, 24], [0, 15, 32]];
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
     return new Promise((resolve) => {
@@ -260,9 +307,9 @@ class TeletaskPlatform {
         try {
           s.write(encodeKeepAlive());
           await sleep(400);
-          for (const [fn, max] of probes) {
+          for (const [pcu, fn, max] of probes) {
             for (let n = 1; n <= max; n++) {
-              s.write(encodeFunctionGet({ centralUnit: cu, functionCode: fn, number: n }));
+              s.write(encodeFunctionGet({ centralUnit: pcu, functionCode: fn, number: n }));
               await sleep(110);
             }
           }
@@ -329,9 +376,9 @@ class TeletaskPlatform {
     for (const a of accessories) {
       const fn = FN_FOR_TYPE[String(a.type ?? "").toLowerCase()];
       if (!fn) continue;
-      // Flags never answer a GET (verified against the unit — they only emit a report
-      // when they change), so auto-discovery can't see them. Don't mark a configured
-      // flag as "not seen / unconfigured".
+      // Flags ARE discoverable now (we probe FN 15 on CU 0 and add new ones above), but
+      // only within the swept range. Don't warn that a configured flag is "not seen /
+      // unconfigured" — it may simply sit above the probed range.
       if (fn === FUNCTION_FLAG) continue;
       const seen = found.has(`${fn}:${Number(a.outputId ?? a.number)}`);
       if (!seen && !a._discoveryNote && a._note == null) {
@@ -361,6 +408,29 @@ class TeletaskPlatform {
     this.devices = this._buildDevices();
   }
 
+  // Give each accessory a read-only `prosoftRef` (REL 05, SEN 04, MOT 03, DIM 01, FLG 01)
+  // derived from its type + number, and remove the old descriptive `prosoftName`. Writes
+  // config.json only when something actually changed, so steady state is a no-op and a
+  // freshly-added accessory just gets its ref filled on the next restart.
+  _syncProsoftRefs() {
+    const list = Array.isArray(this.config.accessories) ? this.config.accessories : [];
+    let changed = false;
+    for (const a of list) {
+      if (!a || typeof a !== "object") continue;
+      if ("prosoftName" in a) { delete a.prosoftName; changed = true; }
+      const ref = prosoftRefFor(a.type, a.outputId ?? a.number);
+      if (ref) {
+        if (a.prosoftRef !== ref) { a.prosoftRef = ref; changed = true; }
+      } else if ("prosoftRef" in a) {
+        delete a.prosoftRef; changed = true;
+      }
+    }
+    if (changed) {
+      this.log.info("Updated TELETASK reference ids (prosoftRef) in config.json.");
+      this._writeConfig();
+    }
+  }
+
   // Write the merged accessories back into config.json (our platform block only).
   _writeConfig() {
     try {
@@ -376,6 +446,8 @@ class TeletaskPlatform {
         return;
       }
       block.accessories = this.config.accessories;
+      // Persist the autoDiscover setting too, so "once" can write back false after it runs.
+      if (this.config.autoDiscover !== undefined) block.autoDiscover = this.config.autoDiscover;
       fs.writeFileSync(configPath, JSON.stringify(json, null, 4) + "\n");
       this.log.info("Auto-discover: config.json updated.");
     } catch (e) {
@@ -424,9 +496,17 @@ class TeletaskPlatform {
     const info =
       accessory.getService(this.Service.AccessoryInformation) ||
       accessory.addService(this.Service.AccessoryInformation);
+    const ref = prosoftRefFor(device.type, device.number);
     info
       .setCharacteristic(this.Characteristic.Manufacturer, "TELETASK")
-      .setCharacteristic(this.Characteristic.Model, `DoIP ${device.type}`)
+      // Model carries the TELETASK id (REL/DIM/MOT/SEN/FLG + number) so it shows in the
+      // Home app's accessory details. Model is display-only — safe to change at any time
+      // without HomeKit re-identifying the accessory.
+      .setCharacteristic(this.Characteristic.Model, ref ? `TELETASK ${ref} (DoIP ${device.type})` : `DoIP ${device.type}`)
+      // SerialNumber MUST stay stable: HomeKit uses it (with the UUID) to recognise an
+      // accessory across restarts, so changing it makes Home treat it as new and lose its
+      // room / name / favourite / automations. device.id = type-cu-number is unique and
+      // immutable per output — do not swap in prosoftRef (it isn't guaranteed unique).
       .setCharacteristic(this.Characteristic.SerialNumber, device.id);
   }
 
@@ -627,16 +707,23 @@ class TeletaskPlatform {
       }
 
       case "flag": {
-        // Read-only switch backed by a TELETASK flag. HomeKit can observe the flag/LED
-        // state (and trigger Home automations off it), but must NOT write it back — the
-        // flag stays owned by TELETASK/PROSOFT. Writes from HomeKit are ignored and the
-        // tile snaps back to the real state, so the switch is effectively read-only.
+        // Switch backed by a TELETASK flag. By default READ-ONLY: HomeKit observes the
+        // flag/LED state (and can trigger Home automations off it) but must not write it
+        // back — writes are ignored and the tile snaps back to the real state.
+        //
+        // With "writable": true, HomeKit may also SET the flag (and so its panel LED),
+        // e.g. to keep a dedicated indicator flag in sync with other HomeKit accessories
+        // via automations. Only enable this on a flag that drives nothing else in PROSOFT.
         const service = useService(S.Switch);
         const isOn = () => Boolean(cached()?.on);
-        service
-          .getCharacteristic(C.On)
-          .onGet(() => isOn())
-          .onSet((value) => {
+        const onChar = service.getCharacteristic(C.On).onGet(() => isOn());
+        if (device.writable) {
+          // setLightPower honours the device's registered functionCode (FLAG = 15), so this
+          // sends a real FLAG ON/OFF set to the unit.
+          onChar.onSet((value) =>
+            this._fire(device.name, () => client.setLightPower(device.id, Boolean(value))));
+        } else {
+          onChar.onSet((value) => {
             if (Boolean(value) !== isOn()) {
               this.log.debug(`${device.name} is a read-only flag; ignoring HomeKit write.`);
               // Revert the optimistic change on the next tick so the tile reflects
@@ -644,7 +731,32 @@ class TeletaskPlatform {
               setTimeout(() => service.updateCharacteristic(C.On, isOn()), 0);
             }
           });
+        }
         update = (n) => service.updateCharacteristic(C.On, Boolean(n?.on));
+        break;
+      }
+
+      case "button": {
+        // A TELETASK flag exposed as a HomeKit *button* (Stateless Programmable Switch).
+        // A physical panel-key press can't be observed directly (the DoIP TPKEY function
+        // is write-only), so in PROSOFT wire the panel button to toggle a flag and point
+        // this accessory at that flag: each flag change fires a single-press event, which
+        // Home automations can trigger on ("When <name> is pressed…").
+        const service = useService(S.StatelessProgrammableSwitch);
+        const Event = C.ProgrammableSwitchEvent;
+        // A flag carries a single bit, so we can't tell single/double/long apart — only
+        // ever emit SINGLE_PRESS, and restrict the valid values so Home doesn't offer
+        // press types that would never fire.
+        service.getCharacteristic(Event).setProps({ validValues: [Event.SINGLE_PRESS] });
+        // Every update here is driven by a real EVENT_REPORT from the unit (flags never
+        // answer the startup GET, so there's no initial/seed callback to suppress). Fire a
+        // press on each one. With a *toggle* flag that's exactly one press per physical
+        // button press; a momentary/pulse flag fires twice (on, then off), so use a toggle
+        // flag in PROSOFT if that matters.
+        update = (n) => {
+          service.updateCharacteristic(Event, Event.SINGLE_PRESS);
+          this.log.info(`${device.name}: button pressed (flag #${device.number} → ${n?.on ? "on" : "off"}).`);
+        };
         break;
       }
 
@@ -677,7 +789,7 @@ class TeletaskPlatform {
     // central unit, so the read-only flag switch still tracks live changes.
     if (!id && Number(state.functionCode) === FUNCTION_FLAG) {
       const dev = this.devices.find(
-        (d) => d.type === "flag" && Number(d.number) === Number(state.number)
+        (d) => Number(d.functionCode) === FUNCTION_FLAG && Number(d.number) === Number(state.number)
       );
       if (dev) id = dev.id;
     }

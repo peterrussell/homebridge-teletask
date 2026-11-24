@@ -81,33 +81,87 @@ For a read‑only temperature reading (no control):
 { "name": "Outside Temp", "type": "sensor", "outputId": 12 }
 ```
 
-## Flags — read‑only switches (panel LEDs, logic flags)
+## Flags — switches (panel LEDs, logic flags)
 
 A TELETASK **flag** is a global boolean that drives panel‑button LEDs and PROSOFT logic. Expose
-one as a **read‑only** HomeKit switch so Home can *observe* its state — and trigger automations
-off it — while the flag stays owned by TELETASK:
+one as a HomeKit switch so Home can observe its state, trigger automations off it, and (by
+default) set it:
 
 ```json
 { "name": "Hall LED", "type": "flag", "outputId": 12 }
 ```
 
-- `outputId` is the **flag number** from PROSOFT (not a relay/output number). **Auto-discovery
-  can't find flags** — unlike relays/dimmers/motors/sensors, a flag never answers a state query
-  (it only emits a report when it *changes*), so you must add flag accessories by hand. Find the
-  number in PROSOFT under the **Flags** function list (or the Hierarchic List).
+- `outputId` is the **flag number** from PROSOFT (not a relay/output number). Find it in PROSOFT
+  under the **Flags** function list (or the Hierarchic List) — or let **[auto‑discovery](auto-discovery.md)**
+  find your flags (it probes flags on central unit 0 and adds any it sees).
 - Flags are global, so **don't** set `centralUnit` — they're always addressed on central unit 0.
-- The switch is **read‑only**: HomeKit can read it and react to it, but tapping the tile won't
-  change the flag (the toggle snaps back). PROSOFT keeps full control of the flag and its LED.
+- The switch is **writable by default** (see below). Set `"writable": false` to make it
+  read‑only, so HomeKit can observe the flag but tapping the tile won't change it (the toggle
+  snaps back) and PROSOFT keeps full control.
 
 ### Why this is useful
 
 The flag becomes a single source of truth you can fan out from. Whatever sets the flag in
 TELETASK (a wall‑panel button, a mood, PROSOFT logic) lights the LED **and** flips this HomeKit
 switch, so a Home automation — *"When Hall LED turns on…"* — can drive any non‑TELETASK HomeKit
-device (Hue lights, a speaker, a smart plug) alongside the PROSOFT‑configured actions. HomeKit
-observes; it never writes the flag back.
+device (Hue lights, a speaker, a smart plug) alongside the PROSOFT‑configured actions.
 
 > **Live state needs the flag to report.** The plugin subscribes to flags on connect, so a flag
 > that changes in TELETASK updates the switch. Confirm the switch tracks the LED on your unit —
 > if it doesn't move, check that the flag is configured to report (and that the TDS15132 licence
 > is active so the unit pushes state).
+
+### Two‑way sync — `writable`
+
+The flag switch is **writable by default**, meaning HomeKit can **set** the flag (and its panel
+LED) as well as read it. Set `"writable": false` for a read‑only flag:
+
+```json
+{ "name": "Bedroom Button 1", "type": "flag", "outputId": 1 }
+{ "name": "Alarm State",      "type": "flag", "outputId": 20, "writable": false }
+```
+
+Writability lets you keep a **dedicated indicator flag** in sync with other HomeKit accessories.
+Say a panel button toggles a flag that mirrors a light: if the flag can't be written, pressing
+the button after the light was changed elsewhere leaves the flag stale, so the next press does
+nothing (you have to press twice). With a writable flag you can add the *reverse* automations —
+
+- **Light turns On → Bedroom Button 1 On**
+- **Light turns Off → Bedroom Button 1 Off**
+
+— so the flag (and its LED) always follows the light, and one press always does the right thing.
+Apple Home won't loop: automations fire on a *change*, so `light on → flag on → light on`
+(already on) settles after one pass.
+
+- ⚠️ A writable flag that **drives PROSOFT logic** (a mood, relay or condition) will **actuate
+  that logic** when HomeKit sets it — including a stray tile tap. For flags like that, set
+  `"writable": false`. (Auto‑discovered flags are writable by default too, so review anything
+  discovery adds that you don't recognise.)
+- `writable` does not change the accessory's identity, so flipping it never re‑creates the
+  accessory (your existing automations survive).
+
+## Buttons — flag → a HomeKit "button" (press events)
+
+Same underlying **flag**, but exposed as a HomeKit **button** (a *Stateless Programmable
+Switch*) instead of a switch. Use this when you want the panel button to *trigger* Home
+automations — in the Automation screen it reads **"When … is pressed"** rather than "Turns
+On / Turns Off":
+
+```json
+{ "name": "Bedroom Button 1", "type": "button", "outputId": 1 }
+```
+
+- `outputId` is the **flag number** from PROSOFT (exactly as for `flag`). Auto-discovery adds
+  flags as the `flag` switch type; to use one as a button instead, add it by hand (or change a
+  discovered entry's `type` to `button`).
+- Every change of the flag fires a **single-press** event. HomeKit buttons have no persistent
+  state, so there's no on/off tile — only the press trigger.
+- **Wire the panel button to *toggle* the flag** in PROSOFT. A toggle flag gives exactly one
+  press event per physical press. A *momentary/pulse* flag (on then auto-off) fires **twice**
+  per press (once for on, once for off), so prefer toggle unless you specifically want that.
+- A flag reports only single-press (a flag is one bit, so single vs double vs long can't be
+  distinguished).
+
+**`flag` vs `button`:** use `flag` when you want to *read* the LED/flag state as an on/off
+switch (and react to on **or** off separately); use `button` when you just want "the button
+was pressed → run this". Both point at the same PROSOFT flag number.
