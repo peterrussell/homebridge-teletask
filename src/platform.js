@@ -329,6 +329,10 @@ class TeletaskPlatform {
     for (const a of accessories) {
       const fn = FN_FOR_TYPE[String(a.type ?? "").toLowerCase()];
       if (!fn) continue;
+      // Flags never answer a GET (verified against the unit — they only emit a report
+      // when they change), so auto-discovery can't see them. Don't mark a configured
+      // flag as "not seen / unconfigured".
+      if (fn === FUNCTION_FLAG) continue;
       const seen = found.has(`${fn}:${Number(a.outputId ?? a.number)}`);
       if (!seen && !a._discoveryNote && a._note == null) {
         a._discoveryNote = `not seen by discovery ${today} — this outputId may be unconfigured on the unit`;
@@ -666,7 +670,17 @@ class TeletaskPlatform {
   }
 
   _onStateChanged(state) {
-    const id = state.deviceId;
+    let id = state.deviceId;
+    // Flags report under a central unit (1 on the wire) that differs from the one used
+    // to address them (0), so the library can't match a flag report to the cu-0 device
+    // by address. Fall back to matching a configured flag by its number, ignoring the
+    // central unit, so the read-only flag switch still tracks live changes.
+    if (!id && Number(state.functionCode) === FUNCTION_FLAG) {
+      const dev = this.devices.find(
+        (d) => d.type === "flag" && Number(d.number) === Number(state.number)
+      );
+      if (dev) id = dev.id;
+    }
     if (id) {
       const handler = this.handlers.get(id);
       if (handler) {

@@ -91,7 +91,10 @@ off it — while the flag stays owned by TELETASK:
 { "name": "Hall LED", "type": "flag", "outputId": 12 }
 ```
 
-- `outputId` is the **flag number** from PROSOFT (not a relay/output number).
+- `outputId` is the **flag number** from PROSOFT (not a relay/output number). **Auto-discovery
+  can't find flags** — unlike relays/dimmers/motors/sensors, a flag never answers a state query
+  (it only emits a report when it *changes*), so you must add flag accessories by hand. Find the
+  number in PROSOFT under the **Flags** function list (or the Hierarchic List).
 - Flags are global, so **don't** set `centralUnit` — they're always addressed on central unit 0.
 - The switch is **read‑only**: HomeKit can read it and react to it, but tapping the tile won't
   change the flag (the toggle snaps back). PROSOFT keeps full control of the flag and its LED.
